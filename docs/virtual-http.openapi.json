@@ -1,0 +1,161 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Mesa virtual ESP8266 HTTP example",
+    "version": "1.0.0",
+    "description": "Simulator-only HTTP contract. No socket, internet, hardware or firmware execution. These example endpoints exist only after explicit configuration of the selected device. No authentication in this isolated model."
+  },
+  "servers": [
+    {
+      "url": "http://192.0.2.1",
+      "description": "Example allocated virtual address; each connected device has a distinct deterministic address."
+    }
+  ],
+  "x-mesa-virtual-only": true,
+  "x-mesa-routing": {
+    "target": "Caller supplies expected componentId and absolute HTTP URL. Address must match that device, never silently reroute.",
+    "configuration": "Exact method/path configurable per device, at most 20 routes, statuses 200..599. GPIO actions allowed on 2xx only.",
+    "constraints": "No credentials, query, fragment, custom port, scripts or external HTTP. Request body is bounded text, never executed.",
+    "lifecycle": "Connect/disconnect synchronous. GPIO actions require running simulation. Stop/reset clears sessions/history/overrides; disconnect retains GPIO state. History bounded to 50 entries per device."
+  },
+  "paths": {
+    "/led/on": {
+      "get": {
+        "operationId": "ledHigh",
+        "summary": "Set configured D1 GPIO HIGH",
+        "description": "Available only when the user installs/configures this example. Success updates output GPIO on the explicitly targeted ESP8266 and evaluates the electrical circuit; it does not guarantee LED illumination.",
+        "responses": {
+          "200": {
+            "description": "Configured response; D1 output HIGH",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unsupported URL/request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Device or configured route not found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Configured path exists with a different method",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Target address mismatch or simulation is not running",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Device disconnected or address pool exhausted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/led/off": {
+      "get": {
+        "operationId": "ledLow",
+        "summary": "Set configured D1 GPIO LOW",
+        "description": "Available only when the user installs/configures this example. Success updates output GPIO on the explicitly targeted ESP8266 and evaluates the electrical circuit; it does not guarantee LED illumination.",
+        "responses": {
+          "200": {
+            "description": "Configured response; D1 output LOW",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unsupported URL/request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Device or configured route not found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Configured path exists with a different method",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Target address mismatch or simulation is not running",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Device disconnected or address pool exhausted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

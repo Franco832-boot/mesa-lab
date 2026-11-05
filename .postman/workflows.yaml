@@ -1,0 +1,4 @@
+workflows:
+  syncSpecToCollection:
+    - spec: ../docs/virtual-http.openapi.json
+      collection: ../postman/collections/Mesa Virtual HTTP Example

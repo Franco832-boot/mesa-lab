@@ -1,0 +1,93 @@
+{
+  "format": "mesa-circuit",
+  "version": 1,
+  "id": "example-gpio",
+  "name": "ESP8266 D1 manual GPIO LED",
+  "components": [
+    {
+      "id": "board",
+      "kind": "esp8266",
+      "position": {
+        "x": 110,
+        "y": 65
+      },
+      "rotation": 0,
+      "properties": {
+        "logicVoltage": 3.3
+      }
+    },
+    {
+      "id": "resistor",
+      "kind": "resistor",
+      "position": {
+        "x": 470,
+        "y": 120
+      },
+      "rotation": 0,
+      "properties": {
+        "resistance": 330
+      }
+    },
+    {
+      "id": "led",
+      "kind": "led",
+      "position": {
+        "x": 560,
+        "y": 190
+      },
+      "rotation": 0,
+      "properties": {
+        "color": "red"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": {
+        "componentId": "board",
+        "pinId": "D1"
+      },
+      "to": {
+        "componentId": "resistor",
+        "pinId": "1"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "w2",
+      "from": {
+        "componentId": "resistor",
+        "pinId": "2"
+      },
+      "to": {
+        "componentId": "led",
+        "pinId": "anode"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "w3",
+      "from": {
+        "componentId": "led",
+        "pinId": "cathode"
+      },
+      "to": {
+        "componentId": "board",
+        "pinId": "GND"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    }
+  ],
+  "programs": [],
+  "viewport": {
+    "offset": {
+      "x": 20,
+      "y": 25
+    },
+    "zoom": 1
+  }
+}

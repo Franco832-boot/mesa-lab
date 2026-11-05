@@ -1,0 +1,118 @@
+{
+  "format": "mesa-circuit",
+  "version": 1,
+  "id": "example-button",
+  "name": "Momentary LED circuit",
+  "components": [
+    {
+      "id": "source",
+      "kind": "power-supply",
+      "position": {
+        "x": 55,
+        "y": 60
+      },
+      "rotation": 0,
+      "properties": {
+        "voltage": 5
+      }
+    },
+    {
+      "id": "resistor",
+      "kind": "resistor",
+      "position": {
+        "x": 470,
+        "y": 120
+      },
+      "rotation": 0,
+      "properties": {
+        "resistance": 330
+      }
+    },
+    {
+      "id": "led",
+      "kind": "led",
+      "position": {
+        "x": 560,
+        "y": 190
+      },
+      "rotation": 0,
+      "properties": {
+        "color": "red"
+      }
+    },
+    {
+      "id": "button",
+      "kind": "pushbutton",
+      "position": {
+        "x": 470,
+        "y": 260
+      },
+      "rotation": 0,
+      "properties": {
+        "normallyClosed": false
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": {
+        "componentId": "source",
+        "pinId": "positive"
+      },
+      "to": {
+        "componentId": "resistor",
+        "pinId": "1"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "w2",
+      "from": {
+        "componentId": "resistor",
+        "pinId": "2"
+      },
+      "to": {
+        "componentId": "led",
+        "pinId": "anode"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "w3",
+      "from": {
+        "componentId": "led",
+        "pinId": "cathode"
+      },
+      "to": {
+        "componentId": "button",
+        "pinId": "1"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "w4",
+      "from": {
+        "componentId": "button",
+        "pinId": "2"
+      },
+      "to": {
+        "componentId": "source",
+        "pinId": "negative"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    }
+  ],
+  "programs": [],
+  "viewport": {
+    "offset": {
+      "x": 20,
+      "y": 25
+    },
+    "zoom": 1
+  }
+}
