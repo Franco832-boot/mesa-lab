@@ -11,6 +11,7 @@ import {
 import type { ProgramFileAction } from '../../model/programFiles';
 import { useLocale } from '../../locales/useLocale';
 import { Dialog } from '../../shared/Dialog';
+import { Icon } from '../../shared/Icon';
 import { BoardHeader } from './BoardHeader';
 import type { ContextBoard } from './boardContext';
 import { boardDisplayLabel } from './boardContext';
@@ -18,11 +19,15 @@ import { boardDisplayLabel } from './boardContext';
 function BoardFiles({
   board,
   program,
+  explorerOpen,
+  onToggleExplorer,
   onChange,
   onFileAction,
 }: {
   board: ContextBoard;
   program: BoardProgram | undefined;
+  explorerOpen: boolean;
+  onToggleExplorer: () => void;
   onChange: (source: string) => void;
   onFileAction: ((action: ProgramFileAction) => boolean) | undefined;
 }) {
@@ -33,6 +38,7 @@ function BoardFiles({
   const [name, setName] = useState('');
   const [error, setError] = useState(false);
   const tabs = useRef(new Map<string, HTMLButtonElement>());
+  const explorerId = `code-file-explorer-${encodeURIComponent(board.id)}`;
   const apply = (action: ProgramFileAction) => {
     const result = onFileAction?.(action) ?? false;
     setError(!result);
@@ -79,47 +85,67 @@ function BoardFiles({
         </button>
         <span>.ino · .h · .cpp · .html · .css · .js</span>
       </div>
-      <div role="tablist" aria-label={t('codeSourceFiles')} className="code-file-tabs">
-        {files.map((file, index) => (
-          <button
-            key={file.name}
-            type="button"
-            role="tab"
-            data-testid="code-file-tab"
-            aria-controls={`code-document-${encodeURIComponent(board.id)}`}
-            aria-selected={file.name === active?.name}
-            tabIndex={file.name === active?.name ? 0 : -1}
-            ref={(node) => {
-              if (node) tabs.current.set(file.name, node);
-              else tabs.current.delete(file.name);
-            }}
-            onClick={() => choose(file.name)}
-            onKeyDown={(event) => {
-              const next =
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? files.length - 1
-                    : event.key === 'ArrowRight'
-                      ? (index + 1) % files.length
-                      : event.key === 'ArrowLeft'
-                        ? (index + files.length - 1) % files.length
-                        : null;
-              const target = next === null ? undefined : files[next];
-              if (target) {
-                event.preventDefault();
-                choose(target.name);
-                tabs.current.get(target.name)?.focus();
-              }
-            }}
-          >
-            {file.name}
-          </button>
-        ))}
+      <div className="code-file-header">
+        <button
+          type="button"
+          className={`icon-button ${explorerOpen ? 'active-subtle' : ''}`}
+          data-testid="code-file-explorer-toggle"
+          aria-label={t('codeSourceFiles')}
+          title={t('codeSourceFiles')}
+          aria-expanded={explorerOpen}
+          aria-controls={explorerId}
+          onClick={onToggleExplorer}
+        >
+          <Icon name="folder" />
+        </button>
+        <div role="tablist" aria-label={t('codeSourceFiles')} className="code-file-tabs">
+          {files.map((file, index) => (
+            <button
+              key={file.name}
+              type="button"
+              role="tab"
+              data-testid="code-file-tab"
+              aria-controls={`code-document-${encodeURIComponent(board.id)}`}
+              aria-selected={file.name === active?.name}
+              tabIndex={file.name === active?.name ? 0 : -1}
+              ref={(node) => {
+                if (node) tabs.current.set(file.name, node);
+                else tabs.current.delete(file.name);
+              }}
+              onClick={() => choose(file.name)}
+              onKeyDown={(event) => {
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? files.length - 1
+                      : event.key === 'ArrowRight'
+                        ? (index + 1) % files.length
+                        : event.key === 'ArrowLeft'
+                          ? (index + files.length - 1) % files.length
+                          : null;
+                const target = next === null ? undefined : files[next];
+                if (target) {
+                  event.preventDefault();
+                  choose(target.name);
+                  tabs.current.get(target.name)?.focus();
+                }
+              }}
+            >
+              {file.name}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="code-files-body">
-        <details className="code-file-explorer" open>
-          <summary>{t('codeSourceFiles')}</summary>
+        <aside
+          id={explorerId}
+          className="code-file-explorer"
+          data-testid="code-file-explorer"
+          aria-label={t('codeSourceFiles')}
+          hidden={!explorerOpen}
+        >
+          <div className="code-file-explorer-heading">{t('codeSourceFiles')}</div>
           <nav aria-label={t('codeSourceFiles')}>
             {files.map((file) => (
               <button
@@ -132,7 +158,7 @@ function BoardFiles({
               </button>
             ))}
           </nav>
-        </details>
+        </aside>
         {active ? (
           <div
             role="tabpanel"
@@ -140,7 +166,6 @@ function BoardFiles({
             aria-label={active.name}
             className="code-document"
           >
-            <span className="code-document-name">{active.name}</span>
             <textarea
               data-testid="board-code-editor"
               aria-label={`${t('boardSource')} · ${board.id} · ${active.name}`}
@@ -264,6 +289,7 @@ export function CodeWorkspace({
 }) {
   const { t } = useLocale();
   const boardTabs = useRef(new Map<string, HTMLButtonElement>());
+  const [explorerOpen, setExplorerOpen] = useState(false);
   const ownProgram = program?.componentId === activeBoard?.id ? program : undefined;
   return (
     <section
@@ -272,9 +298,55 @@ export function CodeWorkspace({
       data-workspace-tool
       aria-label={t('boardCodeTitle')}
     >
-      <div className="code-workspace-title">
-        <strong>{t('boardCodeTitle')}</strong>
-        <span role="status">
+      <div className="code-workspace-header">
+        <div role="tablist" className="code-board-tabs" aria-label={t('chooseActiveBoard')}>
+          {boards.map((board, index) => (
+            <button
+              key={board.id}
+              type="button"
+              role="tab"
+              data-testid="code-board-tab"
+              title={t(
+                board.kind === 'arduino-uno' ? 'unoBoardCapabilities' : 'espBoardCapabilities',
+              )}
+              aria-controls="code-selected-board"
+              data-board-id={board.id}
+              aria-selected={board.id === activeBoard?.id}
+              tabIndex={board.id === activeBoard?.id ? 0 : -1}
+              ref={(node) => {
+                if (node) boardTabs.current.set(board.id, node);
+                else boardTabs.current.delete(board.id);
+              }}
+              onClick={() => onSelectBoard(board.id)}
+              onKeyDown={(event) => {
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? boards.length - 1
+                      : event.key === 'ArrowRight'
+                        ? (index + 1) % boards.length
+                        : event.key === 'ArrowLeft'
+                          ? (index + boards.length - 1) % boards.length
+                          : null;
+                const target = next === null ? undefined : boards[next];
+                if (target) {
+                  event.preventDefault();
+                  onSelectBoard(target.id);
+                  boardTabs.current.get(target.id)?.focus();
+                }
+              }}
+            >
+              {boardDisplayLabel(board, boards)}
+            </button>
+          ))}
+        </div>
+        {onClose && (
+          <button type="button" className="text-button" aria-label={t('close')} onClick={onClose}>
+            ×
+          </button>
+        )}
+        <span className="code-save-state" role="status">
           {t(
             saveStatus === 'saved'
               ? 'codeFilesSaved'
@@ -283,53 +355,6 @@ export function CodeWorkspace({
                 : 'codeFilesSaveError',
           )}
         </span>
-        {onClose && (
-          <button type="button" className="text-button" aria-label={t('close')} onClick={onClose}>
-            ×
-          </button>
-        )}
-      </div>
-      <div role="tablist" className="code-board-tabs" aria-label={t('chooseActiveBoard')}>
-        {boards.map((board, index) => (
-          <button
-            key={board.id}
-            type="button"
-            role="tab"
-            data-testid="code-board-tab"
-            title={t(
-              board.kind === 'arduino-uno' ? 'unoBoardCapabilities' : 'espBoardCapabilities',
-            )}
-            aria-controls="code-selected-board"
-            data-board-id={board.id}
-            aria-selected={board.id === activeBoard?.id}
-            tabIndex={board.id === activeBoard?.id ? 0 : -1}
-            ref={(node) => {
-              if (node) boardTabs.current.set(board.id, node);
-              else boardTabs.current.delete(board.id);
-            }}
-            onClick={() => onSelectBoard(board.id)}
-            onKeyDown={(event) => {
-              const next =
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? boards.length - 1
-                    : event.key === 'ArrowRight'
-                      ? (index + 1) % boards.length
-                      : event.key === 'ArrowLeft'
-                        ? (index + boards.length - 1) % boards.length
-                        : null;
-              const target = next === null ? undefined : boards[next];
-              if (target) {
-                event.preventDefault();
-                onSelectBoard(target.id);
-                boardTabs.current.get(target.id)?.focus();
-              }
-            }}
-          >
-            {boardDisplayLabel(board, boards)}
-          </button>
-        ))}
       </div>
       {!activeBoard ? (
         <BoardHeader components={boards} activeBoardId={undefined} onSelect={onSelectBoard} />
@@ -344,6 +369,8 @@ export function CodeWorkspace({
             key={activeBoard.id}
             board={activeBoard}
             program={ownProgram}
+            explorerOpen={explorerOpen}
+            onToggleExplorer={() => setExplorerOpen((previous) => !previous)}
             onChange={onChange}
             onFileAction={onFileAction}
           />

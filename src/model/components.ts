@@ -6,7 +6,13 @@ import type {
   Point,
 } from './types';
 import { localToWorld } from './coordinates';
-import { artworkPointToLocal, artworkScale, CONTACT_PITCH_MM, millimetersToWorld, physicalSpecs } from './physical';
+import {
+  artworkPointToLocal,
+  artworkScale,
+  CONTACT_PITCH_MM,
+  millimetersToWorld,
+  physicalSpecs,
+} from './physical';
 import type { PhysicalSpec } from './physical';
 
 export interface ContactGroup {
@@ -210,10 +216,19 @@ const sourceDefinitions: Record<
 > = {
   'arduino-uno': {
     pins: unoPins.map((item) => {
-      const gpio = /^A[0-5]$/.test(item.id) ? 14 + Number(item.id.slice(1))
-        : item.id === 'SDA' ? 18 : item.id === 'SCL' ? 19
-        : item.id === 'ICSP-MISO' ? 12 : item.id === 'ICSP-MOSI' ? 11 : item.id === 'ICSP-SCK' ? 13
-        : item.gpio;
+      const gpio = /^A[0-5]$/.test(item.id)
+        ? 14 + Number(item.id.slice(1))
+        : item.id === 'SDA'
+          ? 18
+          : item.id === 'SCL'
+            ? 19
+            : item.id === 'ICSP-MISO'
+              ? 12
+              : item.id === 'ICSP-MOSI'
+                ? 11
+                : item.id === 'ICSP-SCK'
+                  ? 13
+                  : item.gpio;
       return gpio === undefined ? item : { ...item, gpio, maxVoltage: 5 };
     }),
     contactGroups: [
@@ -250,10 +265,15 @@ const sourceDefinitions: Record<
     contactGroups: [],
   },
   pushbutton: {
-    pins: [-1, 1].flatMap((side) => [-1, 1].map((end) =>
-      pin(String((side + 1) + (end === -1 ? 1 : 2)),
-        44.5 + end * millimetersToWorld(1.5 * CONTACT_PITCH_MM) / artworkScale('pushbutton'),
-        46 + side * millimetersToWorld(CONTACT_PITCH_MM) / artworkScale('pushbutton')))),
+    pins: [-1, 1].flatMap((side) =>
+      [-1, 1].map((end) =>
+        pin(
+          String(side + 1 + (end === -1 ? 1 : 2)),
+          44.5 + (end * millimetersToWorld(1.5 * CONTACT_PITCH_MM)) / artworkScale('pushbutton'),
+          46 + (side * millimetersToWorld(CONTACT_PITCH_MM)) / artworkScale('pushbutton'),
+        ),
+      ),
+    ),
     contactGroups: [
       { id: 'left', pinIds: ['1', '3'] },
       { id: 'right', pinIds: ['2', '4'] },
@@ -303,7 +323,9 @@ const pinMaps = new Map(
 export function isComponentKind(value: unknown): value is ComponentKind {
   return typeof value === 'string' && Object.hasOwn(componentDefinitions, value);
 }
-export function isBoardComponent(component: ElectronicComponent): component is Extract<ElectronicComponent, { kind: 'arduino-uno' | 'esp8266' }> {
+export function isBoardComponent(
+  component: ElectronicComponent,
+): component is Extract<ElectronicComponent, { kind: 'arduino-uno' | 'esp8266' }> {
   return component.kind === 'arduino-uno' || component.kind === 'esp8266';
 }
 export function getPin(kind: ComponentKind, id: string): PinDefinition | undefined {

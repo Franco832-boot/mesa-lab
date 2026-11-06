@@ -4,6 +4,7 @@ import { useLocale } from '../locales/useLocale';
 import type { TranslationKey } from '../locales/es/messages';
 import { Icon } from '../shared/Icon';
 import { Dialog } from '../shared/Dialog';
+import { HelpDialog } from './HelpDialog';
 import type { ComponentKind, ElectronicComponent, PinReference, Point, Wire } from '../model/types';
 import { componentDefinitions, createComponent } from '../model/components';
 import type { LedColor } from '../model/components';
@@ -25,18 +26,9 @@ import { useSimulation } from '../features/simulation/useSimulation';
 import { ownInput } from '../sim/topology';
 import { statusMessages } from '../features/simulation/messages';
 
-import { DiagnosticsPanel } from '../features/simulation/DiagnosticsPanel';
-import { groupDiagnostics } from '../features/simulation/diagnostics';
+import { SimulationConsole } from '../features/simulation/SimulationConsole';
 import { componentScreenBounds } from '../features/components/inspectorPlacement';
 
-const roadmapKeys = [
-  'roadmap1',
-  'roadmap2',
-  'roadmap3',
-  'roadmap4',
-  'roadmap5',
-  'roadmap6',
-] as const;
 export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const { t, locale, setLocale } = useLocale();
   const {
@@ -677,45 +669,16 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             wireColor={wireColor}
             connectionRequest={connectionRequest}
           />
-          <div className={`console-panel ${consoleOpen ? 'open' : ''}`}>
-            <button
-              className="console-toggle"
-              onClick={() => setConsoleOpen((previous) => !previous)}
-              aria-expanded={consoleOpen}
-              aria-controls="console-messages"
-            >
-              <span>
-                <Icon name="terminal" size={15} />
-                {t('console')}
-                <span className="console-count">
-                  {groupDiagnostics(simulation.snapshot?.diagnostics ?? []).length}
-                </span>
-              </span>
-              <span className="console-right">
-                {t(statusMessages[simulation.status])}
-                <Icon name={consoleOpen ? 'down' : 'chevron'} size={14} />
-              </span>
-            </button>
-            {consoleOpen && (
-              <div id="console-messages" className="console-message">
-                <div
-                  className="simulation-diagnostics"
-                  data-testid="simulation-diagnostics"
-                  aria-live="polite"
-                >
-                  <p>{t(locked ? 'simulationLocked' : 'simulationReady')}</p>
-                  {initialIssue && <p>{t(initialIssue)}</p>}
-                  {simulation.snapshot && (
-                    <DiagnosticsPanel
-                      diagnostics={simulation.snapshot.diagnostics}
-                      components={project.components}
-                      onNavigate={navigateDiagnostic}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <SimulationConsole
+            open={consoleOpen}
+            onToggle={() => setConsoleOpen((previous) => !previous)}
+            status={simulation.status}
+            locked={locked}
+            diagnostics={simulation.snapshot?.diagnostics ?? null}
+            initialIssue={initialIssue}
+            components={project.components}
+            onNavigate={navigateDiagnostic}
+          />
         </main>
         <ToolSidebar
           canvasRef={stageRef}
@@ -831,31 +794,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           </div>
         )}
       </div>
-      {helpOpen && (
-        <Dialog title={t('helpTitle')} onClose={() => setHelpOpen(false)}>
-          <p className="dialog-intro">{t('helpIntro')}</p>
-          <div className="help-gestures">
-            <Icon name="hand" />
-            <div>
-              <h3>{t('helpGestures')}</h3>
-              <p>{t('helpGestureDetail')}</p>
-            </div>
-          </div>
-          <ol className="roadmap-list">
-            {roadmapKeys.map((key, i) => (
-              <li key={key} className={i === 3 ? 'current' : ''}>
-                <span className="roadmap-number">0{i + 1}</span>
-                <p>{t(key)}</p>
-                {i === 3 && <span className="small-tag">{t('current')}</span>}
-              </li>
-            ))}
-          </ol>
-          <button className="primary-button dialog-done" onClick={() => setHelpOpen(false)}>
-            {t('done')}
-            <Icon name="check" size={16} />
-          </button>
-        </Dialog>
-      )}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       {resetOpen && (
         <Dialog
           title={t('resetTitle')}

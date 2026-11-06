@@ -21,6 +21,17 @@ const render = (activeBoard: ContextBoard | undefined, saved: BoardProgram | und
 };
 
 describe('board code workspace', () => {
+  it('starts with the source explorer hidden and exposes an accessible toggle beside the file tabs', () => {
+    const { markup } = render(uno, program('uno', '// existing source'));
+    const toggle = markup.match(/<button\b[^>]*data-testid="code-file-explorer-toggle"[^>]*>/)?.[0];
+    const explorer = markup.match(/<aside\b[^>]*data-testid="code-file-explorer"[^>]*>/)?.[0];
+    expect(toggle).toContain('aria-expanded="false"');
+    expect(toggle).toContain('aria-controls="code-file-explorer-uno"');
+    expect(explorer).toContain('id="code-file-explorer-uno"');
+    expect(explorer).toContain('hidden=""');
+    expect(markup).toContain('data-testid="code-file-tab"');
+    expect(markup).toContain('// existing source');
+  });
   it('renders saved source for the active board as an editable controlled input', () => {
     const { markup, onChange } = render(esp, program('esp', 'digitalWrite(D1, HIGH);'));
     expect(markup).toContain('data-testid="board-code-editor"');

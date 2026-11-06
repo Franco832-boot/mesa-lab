@@ -363,14 +363,6 @@ export function Workspace(props: WorkspaceProps) {
         </svg>
       </div>
       {props.inspector?.(components, wires)}
-      <div className="desk-heading">
-        <div className="eyebrow">
-          <span className="tiny-square" />
-          {t('reference')}
-        </div>
-        <h1>{t('deskTitle')}</h1>
-        <p>{t('deskSubtitle')}</p>
-      </div>
       <div className="reference-notice" role="status">
         <Icon name="info" size={14} />
         {t(interaction.insertionInvalid ? 'breadboardInvalidPlacement' : interaction.insertionHoles.length ? 'breadboardPlacementReady' : props.locked ? 'simulationLocked' : tool === 'connect' ? (draft ? 'chooseDestination' : 'chooseOrigin') : 'referenceOnly')}

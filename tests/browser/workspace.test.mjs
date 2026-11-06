@@ -112,6 +112,70 @@ test('unified tabs, keyboard resizing and collapse preserve circuit DOM identity
   assert.equal(await page.getByTestId('sidebar-resizer').getAttribute('aria-valuenow'), codeWidth);
 });
 
+for (const width of [1440, 390]) {
+  test(`source explorer toggle releases its full width and retains editor state across tools at ${width}px`, async (t) => {
+    const document = workspaceFixture();
+    document.programs = [{
+      componentId: 'uno', language: 'arduino-cpp', execution: 'unavailable', source: '// main sketch',
+      files: [{ name: 'main.ino', source: '// main sketch' }, { name: 'config.h', source: '#define LED_PIN 13' }],
+      activeFile: 'config.h',
+    }];
+    const page = await openFixture(harness.browser, t, document, { width });
+    const showCode = async () => {
+      await tools(page, 'code');
+      if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('library-toggle').click();
+    };
+    await showCode();
+    const code = panel(page, 'code');
+    const toggle = code.getByTestId('code-file-explorer-toggle');
+    const explorer = code.getByTestId('code-file-explorer');
+    const editor = code.getByTestId('board-code-editor');
+    const editorNode = await editor.elementHandle();
+    assert.ok(editorNode);
+    const assertFullWidth = async () => {
+      const geometry = await code.locator('.code-files-body').evaluate((body) => {
+        const explorer = body.querySelector('.code-file-explorer');
+        const editor = body.querySelector('.code-document');
+        return { body: body.getBoundingClientRect().width, editor: editor.getBoundingClientRect().width,
+          explorer: explorer.getBoundingClientRect().width, display: getComputedStyle(explorer).display };
+      });
+      assert.equal(geometry.display, 'none');
+      assert.equal(geometry.explorer, 0);
+      assert.ok(Math.abs(geometry.body - geometry.editor) < 1, 'Closed explorer reserves no editor width');
+    };
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await assertFullWidth();
+    const closedWidth = await editor.evaluate((node) => node.getBoundingClientRect().width);
+    await toggle.click();
+    assert.equal(await explorer.isVisible(), true);
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert.ok(await editor.evaluate((node) => node.getBoundingClientRect().width) < closedWidth);
+    await editor.fill('#define LED_PIN 7');
+    for (const other of ['components', 'iot']) {
+      await tools(page, other);
+      await showCode();
+      assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+      assert.equal(await explorer.isVisible(), true);
+    }
+    await toggle.click();
+    await assertFullWidth();
+    for (const other of ['components', 'iot']) {
+      await tools(page, other);
+      await showCode();
+      assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+      await assertFullWidth();
+    }
+    assert.equal(await editor.inputValue(), '#define LED_PIN 7');
+    assert.equal(await code.getByTestId('code-file-tab').filter({ hasText: 'config.h' }).getAttribute('aria-selected'), 'true');
+    await assertSameNode(editorNode, '#tool-panel-code [data-testid="board-code-editor"]');
+    await code.getByTestId('code-file-tab').filter({ hasText: 'main.ino' }).click();
+    assert.equal(await editor.inputValue(), '// main sketch');
+    await code.getByTestId('code-file-tab').filter({ hasText: 'config.h' }).click();
+    assert.equal(await editor.inputValue(), '#define LED_PIN 7');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  });
+}
+
 test('code and IoT share automatic/manual board context and independent saved source', async (t) => {
   const page = await openFixture(harness.browser, t, workspaceFixture());
   await tools(page, 'code');

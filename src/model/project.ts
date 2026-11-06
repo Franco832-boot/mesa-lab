@@ -79,7 +79,10 @@ function validProperties(kind: unknown, value: unknown): boolean {
     case 'arduino-uno':
       return value.logicVoltage === 5;
     case 'esp8266':
-      return value.logicVoltage === 3.3 && (value.virtualNetwork === undefined || validateVirtualNetworkConfig(value.virtualNetwork));
+      return (
+        value.logicVoltage === 3.3 &&
+        (value.virtualNetwork === undefined || validateVirtualNetworkConfig(value.virtualNetwork))
+      );
     case 'breadboard':
       return value.columns === 63;
     case 'led':
@@ -108,9 +111,13 @@ function component(value: unknown): value is ElectronicComponent {
     id(value.id) &&
     point(value.position) &&
     finite(value.rotation) &&
-    (value.attachments === undefined || (Array.isArray(value.attachments) &&
-      value.attachments.length <= 4 && value.attachments.every((lead: unknown) =>
-        record(lead) && id(lead.pinId) && id(lead.breadboardId) && id(lead.holeId)))) &&
+    (value.attachments === undefined ||
+      (Array.isArray(value.attachments) &&
+        value.attachments.length <= 4 &&
+        value.attachments.every(
+          (lead: unknown) =>
+            record(lead) && id(lead.pinId) && id(lead.breadboardId) && id(lead.holeId),
+        ))) &&
     validProperties(value.kind, value.properties)
   );
 }
@@ -123,16 +130,30 @@ function normalizeComponent(item: ElectronicComponent): ElectronicComponent {
     id: item.id,
     position: { x: item.position.x, y: item.position.y },
     rotation: item.rotation,
-    ...(item.attachments?.length ? { attachments: item.attachments.map((lead) => ({
-      pinId: lead.pinId, breadboardId: lead.breadboardId, holeId: lead.holeId,
-    })) } : {}),
+    ...(item.attachments?.length
+      ? {
+          attachments: item.attachments.map((lead) => ({
+            pinId: lead.pinId,
+            breadboardId: lead.breadboardId,
+            holeId: lead.holeId,
+          })),
+        }
+      : {}),
   };
   switch (item.kind) {
     case 'arduino-uno':
       return { ...base, kind: item.kind, properties: { logicVoltage: 5 } };
     case 'esp8266':
-      return { ...base, kind: item.kind, properties: { logicVoltage: 3.3,
-        ...(item.properties.virtualNetwork ? { virtualNetwork: normalizeVirtualNetworkConfig(item.properties.virtualNetwork) } : {}) } };
+      return {
+        ...base,
+        kind: item.kind,
+        properties: {
+          logicVoltage: 3.3,
+          ...(item.properties.virtualNetwork
+            ? { virtualNetwork: normalizeVirtualNetworkConfig(item.properties.virtualNetwork) }
+            : {}),
+        },
+      };
     case 'breadboard':
       return { ...base, kind: item.kind, properties: { columns: 63 } };
     case 'led':
@@ -178,8 +199,12 @@ function program(value: unknown): value is BoardProgram {
     value.language === 'arduino-cpp' &&
     value.execution === 'unavailable' &&
     typeof value.source === 'string' &&
-    value.source.length <= MAX_PROGRAM_SOURCE_LENGTH && validProgramFiles({ source: value.source,
-      ...(value.files === undefined ? {} : { files: value.files }), ...(value.activeFile === undefined ? {} : { activeFile: value.activeFile }) })
+    value.source.length <= MAX_PROGRAM_SOURCE_LENGTH &&
+    validProgramFiles({
+      source: value.source,
+      ...(value.files === undefined ? {} : { files: value.files }),
+      ...(value.activeFile === undefined ? {} : { activeFile: value.activeFile }),
+    })
   );
 }
 
@@ -273,7 +298,12 @@ export function parseProject(source: string): CircuitProject {
       language: item.language,
       source: item.source,
       execution: 'unavailable',
-      ...(item.files === undefined ? {} : { files: item.files.map((file) => ({ name: file.name, source: file.source })), activeFile: item.activeFile ?? null }),
+      ...(item.files === undefined
+        ? {}
+        : {
+            files: item.files.map((file) => ({ name: file.name, source: file.source })),
+            activeFile: item.activeFile ?? null,
+          }),
     })),
     viewport: { offset: value.viewport.offset, zoom: value.viewport.zoom },
   };
