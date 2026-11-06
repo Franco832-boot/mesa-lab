@@ -8,7 +8,7 @@ const noop = () => undefined;
 describe('persistent unified tool surfaces', () => {
   it.each(toolTabs)('retains all tab panels when selecting %s', (tab) => {
     const markup = renderToStaticMarkup(createElement(LocaleProvider, { children:
-      createElement(ToolSidebar, { open: true, tab, onTab: noop, onClose: noop,
+      createElement(ToolSidebar, { open: true, tab, onTab: noop, onClose: noop, onToggle: noop,
         panels: { components: createElement('input', { defaultValue: 'search retained' }),
           code: createElement('textarea', { defaultValue: 'board draft retained' }), iot: 'device state retained' } }),
     }));
@@ -17,14 +17,21 @@ describe('persistent unified tool surfaces', () => {
     expect(markup).toContain('device state retained');
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain(`id="tool-tab-${tab}"`);
+    expect(markup).not.toContain('data-testid="sidebar-close"');
     expect((markup.match(/role="tabpanel"/g) ?? [])).toHaveLength(3);
   });
   it('collapses the surface without removing its children', () => {
     const markup = renderToStaticMarkup(createElement(LocaleProvider, { children:
-      createElement(ToolSidebar, { open: false, tab: 'code', onTab: noop, onClose: noop,
+      createElement(ToolSidebar, { open: false, tab: 'code', onTab: noop, onClose: noop, onToggle: noop,
         panels: { components: 'library', code: 'saved draft', iot: 'network' } }),
     }));
     expect(markup).toContain('hidden=""');
     expect(markup).toContain('saved draft');
+    const toggle = markup.match(/<button\b[^>]*data-testid="sidebar-toggle"[^>]*>/)?.[0];
+    expect(toggle).toContain('aria-expanded="false"');
+    expect(toggle).toContain('aria-controls="workspace-tools"');
+    expect(toggle).not.toContain('hidden');
+    expect(markup.indexOf('data-testid="sidebar-toggle"')).toBeLessThan(markup.indexOf('<aside'));
+    expect(markup).toContain('aria-selected="true"');
   });
 });

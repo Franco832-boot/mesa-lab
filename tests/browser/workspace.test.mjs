@@ -75,9 +75,10 @@ test('unified tabs, keyboard resizing and collapse preserve circuit DOM identity
   assert.equal(Number(await resizer.getAttribute('aria-valuenow')), before + 16);
   const divider = await resizer.boundingBox();
   assert.ok(divider);
-  await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2);
+  const resizeY = divider.y + divider.height / 4;
+  await page.mouse.move(divider.x + divider.width / 2, resizeY);
   await page.mouse.down();
-  await page.mouse.move(divider.x + divider.width / 2 - 40, divider.y + divider.height / 2, { steps: 6 });
+  await page.mouse.move(divider.x + divider.width / 2 - 40, resizeY, { steps: 6 });
   await page.mouse.up();
   assert.equal(Number(await resizer.getAttribute('aria-valuenow')), before + 56);
   await resizer.press('Home');
@@ -89,9 +90,9 @@ test('unified tabs, keyboard resizing and collapse preserve circuit DOM identity
   await page.getByTestId('tool-tab-iot').press('Home');
   assert.equal(await page.getByTestId('tool-tab-components').getAttribute('aria-selected'), 'true');
   assert.equal(await resizer.getAttribute('aria-valuenow'), componentsWidth);
-  await page.getByTestId('sidebar-close').click();
+  await page.getByTestId('sidebar-toggle').click();
   assert.equal(await page.getByTestId('tool-sidebar').isVisible(), false);
-  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'library-toggle');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'sidebar-toggle');
   await tools(page, 'code');
   assert.equal(await resizer.getAttribute('aria-valuenow'), codeWidth);
   await panel(page, 'code').getByTestId('board-code-editor').press('Escape');
@@ -113,6 +114,61 @@ test('unified tabs, keyboard resizing and collapse preserve circuit DOM identity
 });
 
 for (const width of [1440, 390]) {
+  test(`sidebar edge toggle preserves its tab, width and editor and stays centered at ${width}px`, async (t) => {
+    const page = await openFixture(harness.browser, t, workspaceFixture(), { width });
+    await tools(page, 'code');
+    const toggle = page.getByTestId('sidebar-toggle');
+    const sidebar = page.getByTestId('tool-sidebar');
+    if (!await sidebar.isVisible()) await toggle.click();
+    const editor = panel(page, 'code').getByTestId('board-code-editor');
+    await editor.fill('// Retained across sidebar collapse');
+    const editorNode = await editor.elementHandle();
+    assert.ok(editorNode);
+    const openWidth = await sidebar.evaluate((node) => node.getBoundingClientRect().width);
+    const assertCentered = async (open) => {
+      await page.waitForFunction((open) => {
+        const button = document.querySelector('[data-testid="sidebar-toggle"]').getBoundingClientRect();
+        const anchor = document.querySelector(open ? '#workspace-tools' : '.lab-layout').getBoundingClientRect();
+        return Math.abs(button.y + button.height / 2 - anchor.y - anchor.height / 2) < 1;
+      }, open);
+      const button = await toggle.boundingBox();
+      const anchor = await page.locator(open ? '#workspace-tools' : '.lab-layout').boundingBox();
+      assert.ok(button && anchor);
+      assert.ok(Math.abs(button.y + button.height / 2 - anchor.y - anchor.height / 2) < 1);
+      assert.ok(button.x >= 0 && button.x + button.width <= page.viewportSize().width);
+      assert.equal(await toggle.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        return hit === node || node.contains(hit);
+      }), true, 'Edge toggle remains clickable');
+    };
+    await assertCentered(true);
+    const button = await toggle.boundingBox();
+    const editorBounds = await editor.boundingBox();
+    assert.ok(button && editorBounds);
+    assert.ok(button.x + button.width <= editorBounds.x, 'Edge control does not cover the code editor');
+    await toggle.click();
+    assert.equal(await sidebar.isVisible(), false);
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    const widths = await page.locator('.lab-layout').evaluate((layout) => ({
+      layout: layout.getBoundingClientRect().width,
+      circuit: layout.querySelector('.workspace-main').getBoundingClientRect().width,
+    }));
+    assert.ok(Math.abs(widths.layout - widths.circuit) < 1, 'Collapsed sidebar reserves no column');
+    await assertCentered(false);
+    await page.setViewportSize({ width: width === 1440 ? 1280 : 360, height: 800 });
+    await assertCentered(false);
+    await toggle.click();
+    await assertCentered(true);
+    await page.setViewportSize({ width, height: 1000 });
+    await assertCentered(true);
+    assert.equal(await page.getByTestId('tool-tab-code').getAttribute('aria-selected'), 'true');
+    assert.equal(await sidebar.evaluate((node) => node.getBoundingClientRect().width), openWidth);
+    assert.equal(await editor.inputValue(), '// Retained across sidebar collapse');
+    await assertSameNode(editorNode, '#tool-panel-code [data-testid="board-code-editor"]');
+    assert.equal(await sidebar.getByTestId('sidebar-toggle').count(), 0);
+  });
+
   test(`source explorer toggle releases its full width and retains editor state across tools at ${width}px`, async (t) => {
     const document = workspaceFixture();
     document.programs = [{
@@ -305,8 +361,8 @@ for (const width of [1440, 390]) {
         assert.match(await page.getByTestId('tool-sidebar').getAttribute('class'), /is-expanded/);
         await assertUnobscuredMessages();
       }
-      await page.getByTestId('sidebar-close').click();
-      await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'library-toggle');
+      await page.getByTestId('sidebar-toggle').click();
+      await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'sidebar-toggle');
       assert.equal(await page.getByTestId('library-toggle').getAttribute('aria-expanded'), 'false');
       await assertSameNode(stage, '[data-testid="workspace-stage"]');
     });

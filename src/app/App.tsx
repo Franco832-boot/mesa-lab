@@ -684,6 +684,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           canvasRef={stageRef}
           onDockChange={setToolDockOffset}
           open={libraryOpen}
+          onToggle={toggleLibrary}
           tab={toolTab}
           onTab={(tab) => {
             setToolTab(tab);
