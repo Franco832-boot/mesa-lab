@@ -500,7 +500,9 @@ test('tool switching and stored code edits retain running and paused electrical 
 test('SVG layers keep breadboards below wires, parts above wires and diagnostic overlays last', async (t) => {
   const page = await openFixture(harness.browser, t, workspaceFixture({ reversed: true }));
   const layers = await page.locator('.workspace-svg > g > [data-layer]').evaluateAll((nodes) => nodes.map((node) => node.dataset.layer));
-  assert.deepEqual(layers, ['background', 'wires', 'components', 'overlays']);
+  assert.deepEqual(layers, ['background', 'boards', 'wires', 'components', 'overlays']);
+  assert.equal(await part(page, 'uno').evaluate((node) => node.closest('[data-layer]').dataset.layer), 'boards');
+  assert.equal(await part(page, 'esp').evaluate((node) => node.closest('[data-layer]').dataset.layer), 'boards');
   assert.equal(await part(page, 'bb').evaluate((node) => node.closest('[data-layer]').dataset.layer), 'background');
   assert.equal(await part(page, 'led').evaluate((node) => node.closest('[data-layer]').dataset.layer), 'components');
   assert.equal(await page.locator('[data-wire="supply"].circuit-wire').evaluate((node) => node.closest('[data-layer]').dataset.layer), 'wires');

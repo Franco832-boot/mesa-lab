@@ -53,6 +53,7 @@ export function WireInspector({
         </div>
       </div>
       <div id="context-inspector-body" className="inspector-scroll wire-inspector">
+        <div data-inspector-content className="inspector-content">
         <div className="wire-terminals">
           <code>
             {wire.from.componentId}
@@ -130,6 +131,7 @@ export function WireInspector({
           {t('remove')}
         </button>
         </fieldset>
+        </div>
       </div>
       <div className="info-callout">
         <Icon name="info" />

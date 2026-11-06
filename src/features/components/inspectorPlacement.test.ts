@@ -5,6 +5,11 @@ import type { InspectorAnchor } from './inspectorPlacement';
 
 const anchor: InspectorAnchor = { rect: { x: 300, y: 260, width: 40, height: 40 }, obstacles: [], protect: true };
 describe('contextual inspector placement', () => {
+  it('fits short content exactly and clamps long content to the available surface', () => {
+    expect(placeInspector({ width: 1100, height: 800 }, anchor, false, false, 275).height).toBe(275);
+    expect(placeInspector({ width: 1100, height: 800 }, anchor, false, false, 900).height).toBe(430);
+    expect(placeInspector({ width: 390, height: 600 }, anchor, false, true, 150)).toMatchObject({ height: 150, y: 442 });
+  });
   it('opens beside the selected part and leaves its control unobscured', () => {
     const panel = placeInspector({ width: 1100, height: 800 }, anchor, false, false);
     expect(panel.x).toBe(356);

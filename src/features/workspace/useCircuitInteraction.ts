@@ -14,6 +14,7 @@ import type { InsertionPlan } from '../../model/breadboard';
 import type { LedColor } from '../../model/components';
 import type { EditorCommand } from '../../model/editor';
 import { screenToWorld } from '../../model/coordinates';
+import { moveWireCorner, moveWireSegment, nearestWireSegment, routeWaypoints, wireGeometry } from '../../model/wireGeometry';
 import { useWorkspaceNavigation } from './useWorkspaceNavigation';
 
 type Drag =
@@ -24,7 +25,7 @@ type Drag =
       positions: Record<string, Point>;
       moved: boolean;
     }
-  | { type: 'waypoint'; wire: Wire; index: number; points: Point[]; moved: boolean };
+  | { type: 'wire'; mode: 'corner' | 'segment'; wire: Wire; index: number; initial: Point[]; start: Point; points: Point[]; moved: boolean };
 interface Tap {
   screen: Point;
   pin: PinReference | null;
@@ -121,6 +122,11 @@ export function useCircuitInteraction(props: InteractionProps) {
   useEffect(() => {
     if (!props.libraryDrag) setDropPreview(null);
   }, [props.libraryDrag]);
+  useEffect(() => {
+    if (drag.current?.type === 'wire') {
+      clearDrag(); navigation.cancelGesture();
+    }
+  }, [viewport.zoom, navigation.cancelGesture]);
   const inputs = useRef({ components, execute, wireColor, locked: props.locked });
   inputs.current = { components, execute, wireColor, locked: props.locked };
   const onPickPin = useCallback((reference: PinReference) => {
@@ -169,11 +175,7 @@ export function useCircuitInteraction(props: InteractionProps) {
     const component = target?.closest<SVGElement>('[data-reference]')?.dataset.reference;
     const wireId = target?.closest<SVGElement>('[data-wire]')?.dataset.wire;
     const waypoint = target?.closest<SVGElement>('[data-waypoint]')?.dataset.waypoint;
-    if (props.locked) {
-      if (component) onSelectComponent(component);
-      else if (wireId) onSelectWire(wireId);
-      return;
-    }
+    const segment = target?.closest<SVGElement>('[data-segment]')?.dataset.segment;
     const point = world(event.clientX, event.clientY);
     tap.current = {
       screen: { x: event.clientX, y: event.clientY },
@@ -184,6 +186,11 @@ export function useCircuitInteraction(props: InteractionProps) {
       background: !component && !wireId,
       moved: false,
     };
+    if (props.locked) {
+      if (component) onSelectComponent(component);
+      else if (wireId) onSelectWire(wireId);
+      return;
+    }
     if (tool === 'connect') {
       if (component && !pin) onSelectComponent(component);
       return;
@@ -191,13 +198,13 @@ export function useCircuitInteraction(props: InteractionProps) {
     if (wireId) {
       onSelectWire(wireId);
       const wire = wires.find((item) => item.id === wireId);
-      if (wire && waypoint !== undefined)
+      const geometry = wire ? wireGeometry(components, wire) : null;
+      const index = waypoint !== undefined ? Number(waypoint) : segment !== undefined ? Number(segment)
+        : geometry ? nearestWireSegment(geometry, point) : null;
+      if (wire && geometry && index !== null)
         drag.current = {
-          type: 'waypoint',
-          wire,
-          index: Number(waypoint),
-          points: wire.waypoints,
-          moved: false,
+          type: 'wire', mode: waypoint !== undefined ? 'corner' : 'segment', wire, index,
+          initial: geometry, points: geometry, start: point, moved: false,
         };
       return;
     }
@@ -233,8 +240,8 @@ export function useCircuitInteraction(props: InteractionProps) {
       activeTap.moved = true;
     const current = drag.current;
     if (current && activeTap?.moved) {
-      current.moved = true;
       if (current.type === 'components') {
+        current.moved = true;
         const dx = point.x - current.start.x;
         const dy = point.y - current.start.y;
         current.positions = Object.fromEntries(
@@ -245,7 +252,13 @@ export function useCircuitInteraction(props: InteractionProps) {
         );
         setPositions(current.positions);
       } else {
-        current.points = current.wire.waypoints.map((p, i) => (i === current.index ? point : p));
+        if (current.mode === 'segment') {
+          const a = current.initial[current.index], b = current.initial[current.index + 1];
+          if (!a || !b || Math.abs(a.x === b.x ? point.x - current.start.x : point.y - current.start.y) * viewport.zoom <= 4) return;
+        }
+        current.moved = true;
+        current.points = current.mode === 'corner' ? moveWireCorner(current.initial, current.index, point)
+          : moveWireSegment(current.initial, current.index, { x: point.x - current.start.x, y: point.y - current.start.y });
         setRoute({ id: current.wire.id, points: current.points });
       }
     }
@@ -266,7 +279,7 @@ export function useCircuitInteraction(props: InteractionProps) {
             type: 'wire',
             id: current.wire.id,
             color: current.wire.color,
-            waypoints: current.points,
+            waypoints: routeWaypoints(current.points),
           });
       } else if (click && !click.moved) {
         if (tool === 'connect') {
@@ -343,7 +356,7 @@ export function useCircuitInteraction(props: InteractionProps) {
   const renderedWires = useMemo(
     () =>
       route
-        ? wires.map((item) => (item.id === route.id ? { ...item, waypoints: route.points } : item))
+        ? wires.map((item) => (item.id === route.id ? { ...item, waypoints: routeWaypoints(route.points) } : item))
         : wires,
     [wires, route],
   );
@@ -351,6 +364,7 @@ export function useCircuitInteraction(props: InteractionProps) {
     ...navigation,
     renderedComponents,
     renderedWires,
+    routePreview: route,
     draft,
     insertionHoles: movePlan?.holes ?? dropPreview?.holes ?? [],
     insertionInvalid: (movePlan !== null && !movePlan.valid) || (dropPreview !== null && !dropPreview.valid),

@@ -58,13 +58,15 @@ export function inspectorAnchor(
 export function placeInspector(
   canvas: { width: number; height: number }, anchor: InspectorAnchor,
   expanded: boolean, mobile: boolean,
+  naturalHeight?: number,
 ): PanelRect {
   if (canvas.width <= 0 || canvas.height <= 0) return { x: 0, y: 0, width: 0, height: 0 };
   const margin = Math.min(mobile ? 8 : 12, canvas.width / 4, canvas.height / 4);
   const width = Math.min(mobile ? canvas.width : expanded ? 480 : 320, canvas.width - margin * 2);
-  const height = Math.min(canvas.height - margin * 2, mobile
+  const maximumHeight = Math.min(canvas.height - margin * 2, mobile
     ? expanded ? canvas.height * 0.78 : Math.max(Math.min(180, canvas.height * 0.48), canvas.height * 0.44)
     : expanded ? 680 : 430);
+  const height = naturalHeight === undefined ? maximumHeight : Math.min(maximumHeight, Math.max(64, naturalHeight));
   if (mobile) return { x: margin, y: canvas.height - height - margin, width, height };
   const target = anchor.rect, gap = 16;
   const centerX = target.x + target.width / 2, centerY = target.y + target.height / 2;

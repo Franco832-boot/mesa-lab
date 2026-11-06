@@ -21,9 +21,11 @@ async function add(page, kind) {
 async function connect(page, from, fromPin, to, toPin) {
   const before = await page.locator('[data-wire].circuit-wire').count();
   await select(page, from);
+  if (await page.getByTestId('inspector-more').count() && await page.getByTestId('inspector-more').getAttribute('aria-expanded') === 'false') await page.getByTestId('inspector-more').click();
   await page.getByTestId('terminal-select').selectOption(fromPin);
   await page.getByTestId('connect-terminal').click();
   await select(page, to);
+  if (await page.getByTestId('inspector-more').count() && await page.getByTestId('inspector-more').getAttribute('aria-expanded') === 'false') await page.getByTestId('inspector-more').click();
   await page.getByTestId('terminal-select').selectOption(toPin);
   await page.getByTestId('connect-terminal').click();
   await page.waitForFunction((count) => document.querySelectorAll('[data-wire].circuit-wire').length === count, before + 1);

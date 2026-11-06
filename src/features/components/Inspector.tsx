@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ComponentKind, ElectronicComponent, PinReference } from '../../model/types';
 import type { ComponentPropertyUpdate } from '../../model/editor';
 import { componentDefinitions } from '../../model/components';
@@ -45,6 +45,9 @@ export function Inspector({
 }: InspectorProps) {
   const { t, locale } = useLocale();
   const [tab, setTab] = useState<'overview' | 'pinout'>('overview');
+  const [advanced, setAdvanced] = useState(locked);
+  useEffect(() => { if (locked) setAdvanced(true); }, [locked]);
+  const compact = kind === 'led' || kind === 'arduino-uno' || kind === 'esp8266';
   const entry = getCatalogEntry(kind);
   const pins = componentDefinitions[kind].pins;
   const [pinId, setPinId] = useState(pins[0]?.id ?? '');
@@ -74,6 +77,7 @@ export function Inspector({
         </div>
       </div>
       <div id="context-inspector-body" className="inspector-scroll">
+        <div data-inspector-content className="inspector-content">
         <div className="inspector-preview">
           <div className="preview-tag">{t('componentModel')}</div>
           <ComponentThumbnail
@@ -199,6 +203,11 @@ export function Inspector({
             {!component && <p className="inspector-hint">{t('selectToEdit')}</p>}
           </>
         )}
+        {compact && <button type="button" className="inspector-more text-button" data-testid="inspector-more"
+          aria-expanded={advanced} aria-controls="inspector-advanced" onClick={() => setAdvanced((value) => !value)}>
+          {t('inspectorMore')} <Icon name={advanced ? 'minus' : 'plus'} size={14} />
+        </button>}
+        <div id="inspector-advanced" hidden={compact && !advanced}>
         {component && (
           <div className="terminal-picker">
             <label htmlFor="inspector-pin">{t('exactPin')}</label>
@@ -267,6 +276,8 @@ export function Inspector({
           <Icon name="arrow" size={15} />
         </button>
       </div>
+        </div>
+        </div>
       </div>
     </aside>
   );

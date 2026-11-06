@@ -9,7 +9,9 @@ import type {
   WorkspaceTool,
 } from '../../model/types';
 import type { EditorCommand } from '../../model/editor';
-import { orthogonalRoute, wirePoints } from '../../model/editor';
+import { orthogonalRoute } from '../../model/editor';
+import { wireGeometry } from '../../model/wireGeometry';
+import { WireControls, WireLayer } from './WireLayer';
 import { pinWorldPosition } from '../../model/components';
 import { CONTACT_PITCH_MM, millimetersToWorld, visualBounds } from '../../model/physical';
 import type { LedColor } from '../../model/components';
@@ -80,6 +82,8 @@ export function Workspace(props: WorkspaceProps) {
     const result = ownInput(props.simulation.snapshot?.components, item.id);
     const wiperRatio = props.wiperPreview?.componentId === item.id ? props.wiperPreview.ratio
       : ownInput(props.simulation.inputs.potentiometers, item.id);
+    const status = t(props.simulation.snapshot ? conditionMessages[result?.condition ?? 'normal'] : 'unpowered');
+    const label = `${t(entry.name)} · ${item.id} · ${status}`;
     return (
       <g
         key={item.id}
@@ -89,7 +93,7 @@ export function Workspace(props: WorkspaceProps) {
         data-brightness={result?.brightness ?? 0}
         role="button"
         tabIndex={0}
-        aria-label={`${t(entry.name)} · ${item.id}`}
+        aria-label={label}
         aria-pressed={selectedIds.includes(item.id)}
         className="reference-component"
         transform={`translate(${item.position.x} ${item.position.y}) rotate(${item.rotation})`}
@@ -134,6 +138,7 @@ export function Workspace(props: WorkspaceProps) {
           if (item.kind === 'pushbutton') props.simulation.setButton(item.id, false);
         }}
       >
+        <title>{label}</title>
         <rect
           className={`component-outline  ${interaction.insertionInvalid && interaction.insertingIds.includes(item.id) ? 'invalid-insertion' : ''}`}
           x={bounds.x - 6}
@@ -151,24 +156,6 @@ export function Workspace(props: WorkspaceProps) {
             {...(wiperRatio !== undefined ? { wiperRatio } : {})}
           />
         </g>
-        <text
-          className="reference-name"
-          x={entry.width / 2}
-          y={bounds.y + bounds.height + 25}
-          textAnchor="middle"
-        >
-          {t(entry.name)}
-        </text>
-        <text
-          className="reference-detail"
-          x={entry.width / 2}
-          y={bounds.y + bounds.height + 43}
-          textAnchor="middle"
-        >
-          {t(props.simulation.snapshot
-            ? conditionMessages[result?.condition ?? 'normal']
-            : 'unpowered')}
-        </text>
       </g>
     );
   };
@@ -202,73 +189,17 @@ export function Workspace(props: WorkspaceProps) {
             transform={`translate(${viewport.offset.x} ${viewport.offset.y}) scale(${viewport.zoom})`}
           >
             <g data-layer="background">{components.filter((item) => item.kind === 'breadboard').map(renderComponent)}</g>
+            <g data-layer="boards">{components.filter((item) => item.kind === 'arduino-uno' || item.kind === 'esp8266').map(renderComponent)}</g>
             <g data-layer="wires">
-            {wires.map((wire) => {
-              const points = wirePoints(components, wire);
-              if (!points) return null;
-              return (
-                <g
-                  key={wire.id}
-                  data-wire={wire.id}
-                  className={`circuit-wire ${selectedWire === wire.id ? 'selected-wire' : ''} ${props.highlightedIds?.some((id) => id === wire.from.componentId || id === wire.to.componentId) ? 'diagnostic-wire' : ''}`} 
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`${t('wire')} ${wire.id} · ${wire.from.pinId} → ${wire.to.pinId}`}
-                  aria-pressed={selectedWire === wire.id}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      props.onSelectWire(wire.id);
-                    }
-                  }}
-                  onDoubleClick={(event) => {
-                    if (tool === 'select' && !props.locked) {
-                      event.stopPropagation();
-                      execute({
-                        type: 'wire',
-                        id: wire.id,
-                        color: wire.color,
-                        waypoints: [
-                          ...wire.waypoints,
-                          interaction.world(event.clientX, event.clientY),
-                        ],
-                      });
-                    }
-                  }}
-                >
-                  <polyline
-                    points={pointsAttribute(points)}
-                    fill="none"
-                    stroke="#00000018"
-                    strokeWidth="6"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    pointerEvents="none"
-                    transform="translate(0 1)"
-                  />
-                  <polyline
-                    className="wire-stroke"
-                    points={pointsAttribute(points)}
-                    fill="none"
-                    stroke={wire.color}
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  <polyline
-                    points={pointsAttribute(points)}
-                    fill="none"
-                    stroke="transparent"
-                    strokeWidth={Math.max(12 / viewport.zoom, 5)}
-                    strokeLinejoin="round"
-                    className="wire-hit"
-                  />
-                </g>
-              );
-            })}
+              {wires.map((wire) => {
+                const points = wireGeometry(components, wire);
+                return points ? <WireLayer key={wire.id} wire={wire} points={points} selected={selectedWire === wire.id}
+                  editable={tool === 'select' && !props.locked} zoom={viewport.zoom} select={props.onSelectWire}
+                  related={props.highlightedIds?.some((id) => id === wire.from.componentId || id === wire.to.componentId) ?? false}
+                  world={interaction.world} execute={execute} /> : null;
+              })}
             </g>
-            <g data-layer="components">{components.filter((item) => item.kind !== 'breadboard').map(renderComponent)}</g>
+            <g data-layer="components">{components.filter((item) => !['breadboard', 'arduino-uno', 'esp8266'].includes(item.kind)).map(renderComponent)}</g>
             <g data-layer="overlays">
               {components.map((item) => {
                 const bounds = visualBounds(item.kind);
@@ -302,25 +233,19 @@ export function Workspace(props: WorkspaceProps) {
                   />
                 </g>
               ))}
-            {tool === 'select' && !props.locked &&
-              wires
-                .filter((wire) => wire.id === selectedWire)
-                .map((wire) => (
-                  <g key={`handles-${wire.id}`} data-wire={wire.id}>
-                    {wire.waypoints.map((point, index) => (
-                      <circle
-                        key={index}
-                        data-waypoint={index}
-                        cx={point.x}
-                        cy={point.y}
-                        r={7 / viewport.zoom}
-                        className="waypoint-handle"
-                      >
-                        <title>{`${t('waypoint')} ${index + 1}`}</title>
-                      </circle>
-                    ))}
-                  </g>
-                ))}
+            {wires.map((wire) => {
+              const points = wireGeometry(components, wire);
+              if (!points) return null;
+              const controls = interaction.routePreview?.id === wire.id ? interaction.routePreview.points : points;
+              return <g key={`wire-overlay-${wire.id}`}>
+                <g data-wire-endpoints={wire.id} pointerEvents="none" aria-hidden="true">
+                  {[points[0], points.at(-1)].map((point, index) => point ? <circle key={index} cx={point.x} cy={point.y}
+                    r={2.3 / viewport.zoom} fill={wire.color} stroke="white" strokeWidth={0.7 / viewport.zoom} /> : null)}
+                </g>
+                {tool === 'select' && !props.locked && selectedWire === wire.id &&
+                  <WireControls wire={wire} points={controls} zoom={viewport.zoom} execute={execute} />}
+              </g>;
+            })}
             {interaction.insertionHoles.map((hole) => {
               const point = pinWorldPosition(components, hole);
               return point ? <circle key={`${hole.componentId}-${hole.pinId}`}

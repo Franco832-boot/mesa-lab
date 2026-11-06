@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { ElectronicComponent, Viewport, Wire } from '../../model/types';
 import { useLocale } from '../../locales/useLocale';
@@ -24,6 +24,7 @@ export function ContextualInspector({
   const panel = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
+  const [naturalHeight, setNaturalHeight] = useState<number>();
   const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches);
   useEffect(() => {
     const stage = stageRef.current;
@@ -46,10 +47,33 @@ export function ContextualInspector({
       media.removeEventListener('change', measure);
     };
   }, [stageRef]);
+  useLayoutEffect(() => {
+    const surface = panel.current?.querySelector('.inspector-panel');
+    const scroll = surface?.querySelector('.inspector-scroll');
+    const content = scroll?.querySelector('[data-inspector-content]');
+    if (!surface || !scroll || !content) return;
+    const measure = () => {
+      if (surface.getBoundingClientRect().width <= 0) return;
+      const styles = window.getComputedStyle(scroll);
+      let height = content.getBoundingClientRect().height + parseFloat(styles.paddingTop || '0') + parseFloat(styles.paddingBottom || '0') + 2;
+      for (const child of surface.children) {
+        if (child === scroll) continue;
+        const style = window.getComputedStyle(child);
+        height += child.getBoundingClientRect().height + parseFloat(style.marginTop || '0') + parseFloat(style.marginBottom || '0');
+      }
+      const measured = Math.ceil(height);
+      setNaturalHeight((previous) => previous === measured ? previous : measured);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(content);
+    for (const child of surface.children) if (child !== scroll) observer?.observe(child);
+    return () => observer?.disconnect();
+  }, [componentId, wireId, expanded, canvas.width, canvas.height]);
   const anchor = useMemo(() => inspectorAnchor(components, wires, viewport, componentId, wireId),
     [components, wires, viewport, componentId, wireId]);
-  const rect = useMemo(() => anchor ? placeInspector(canvas, anchor, expanded, mobile) : null,
-    [canvas, anchor, expanded, mobile]);
+  const rect = useMemo(() => anchor ? placeInspector(canvas, anchor, expanded, mobile, naturalHeight) : null,
+    [canvas, anchor, expanded, mobile, naturalHeight]);
   useEffect(() => {
     onSheetDockChange(mobile && rect ? Math.max(8, Math.min(canvas.height - 44, rect.height + 20)) : 0);
   }, [mobile, rect, canvas.height, onSheetDockChange]);

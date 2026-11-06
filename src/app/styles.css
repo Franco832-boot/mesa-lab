@@ -1887,6 +1887,18 @@ button {
 .waypoint-handle:hover {
   fill: #e6ddf8;
 }
+.waypoint-handle:focus-visible, .segment-handle:focus-visible {
+  outline: none;
+  stroke: #5934a4;
+  stroke-width: 2.5;
+  fill: #e6ddf8;
+}
+.segment-handle {
+  fill: #fff;
+  stroke: #a08bbf;
+  stroke-width: 1;
+}
+.stage.tool-pan .wire-hit { cursor: grab !important; }
 .reference-notice {
   background: #f7f8facc;
   padding: 6px 10px;
@@ -2452,6 +2464,16 @@ fieldset.terminal-picker {
 .floating-inspector .inspector-scroll {
   overscroll-behavior: contain;
 }
+.inspector-content { display: flow-root; }
+.floating-inspector .panel-heading { min-height: 48px; padding: 10px 14px 8px; }
+.floating-inspector .inspector-title { margin: 8px 14px; }
+.floating-inspector .inspector-title p { margin-top: 4px; }
+.floating-inspector .property-list { padding: 4px 14px; }
+.floating-inspector .property-list > div { min-height: 26px; }
+.floating-inspector .component-edit-actions { margin: 6px 14px; }
+.floating-inspector .inspector-tabs { margin: 8px 14px 0; }
+.floating-inspector .editable-properties { margin: 8px 14px; }
+.inspector-more { display: flex; justify-content: space-between; align-items: center; width: calc(100% - 28px); margin: 8px 14px; padding: 7px 0; }
 .floating-inspector:not(.is-expanded) .inspector-preview {
   display: none;
 }
