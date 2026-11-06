@@ -242,7 +242,7 @@ describe('source execution through the shared electrical circuit', () => {
     const doc = fixture();
     let state = transitionSimulation(initialSimulation(), run('uno', blink()), doc);
     const uno = state.firmware.uno;
-    state = transitionSimulation(state, run('esp', 'void setup(){Serial.begin(9600);} void loop(){}'), doc);
+    state = transitionSimulation(state, run('esp', 'void setup(){Serial.notSupported();} void loop(){}'), doc);
     expect(state.firmware.esp?.error).toBe('unsupported-syntax');
     expect(state.firmware.uno).toBe(uno);
     expect(state.snapshot?.components.led?.brightness).toBeGreaterThan(0);

@@ -16,6 +16,7 @@ export interface SimulationState {
   virtualNetwork: VirtualNetworkState;
 }
 export type SimulationEvent = FirmwareEvent
+  | { type: 'dht11'; componentId: string; temperature: number; humidity: number }
   | { type: 'start' | 'pause' | 'stop' | 'reset' }
   | { type: 'gpio'; componentId: string; pinId: string; state: GpioState }
   | { type: 'button'; componentId: string; pressed: boolean }
@@ -62,6 +63,9 @@ export function transitionSimulation(
   if (previous.status !== 'running') return previous;
   let inputs: SimulationInputs;
   switch (event.type) {
+    case 'dht11':
+      inputs = { ...previous.inputs, dht11: { ...previous.inputs.dht11, [event.componentId]: { temperature: event.temperature, humidity: event.humidity } } };
+      break;
     case 'gpio': {
       const key = pinKey(event.componentId, event.pinId);
       const old = ownInput(previous.inputs.gpio, key);

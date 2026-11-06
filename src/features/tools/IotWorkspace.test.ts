@@ -26,7 +26,7 @@ const configured = (id: string): ContextBoard => {
 const first = configured('esp-1'), second = configured('esp-2');
 const project = (): CircuitProject => ({ ...createProject('iot-ui'), components: [uno, first, second], wires: [] });
 const controller = (state: SimulationState): SimulationController => ({
-  ...state, start: vi.fn(), pause: vi.fn(), stop: vi.fn(), reset: vi.fn(), setGpio: vi.fn(), setButton: vi.fn(), setPotentiometer: vi.fn(),
+  ...state, start: vi.fn(), pause: vi.fn(), stop: vi.fn(), reset: vi.fn(), setGpio: vi.fn(), setButton: vi.fn(), setDht11: vi.fn(), setPotentiometer: vi.fn(),
   runFirmware: vi.fn(), stopFirmware: vi.fn(), connectDevice: vi.fn(), disconnectDevice: vi.fn(), requestHttp: vi.fn(),
 });
 const render = (state: SimulationState, activeBoard: ContextBoard | undefined, boards: ContextBoard[] = [uno, first, second]) => {

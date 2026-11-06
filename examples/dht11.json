@@ -1,0 +1,89 @@
+{
+  "format": "mesa-circuit",
+  "version": 1,
+  "id": "dht-fixture",
+  "name": "DHT11 KY-015",
+  "components": [
+    {
+      "id": "uno",
+      "kind": "arduino-uno",
+      "position": {
+        "x": 50,
+        "y": 60
+      },
+      "rotation": 0,
+      "properties": {
+        "logicVoltage": 5
+      }
+    },
+    {
+      "id": "sensor",
+      "kind": "dht11",
+      "position": {
+        "x": 400,
+        "y": 180
+      },
+      "rotation": 0,
+      "properties": {
+        "temperature": 25,
+        "humidity": 50
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "vcc",
+      "from": {
+        "componentId": "uno",
+        "pinId": "5V"
+      },
+      "to": {
+        "componentId": "sensor",
+        "pinId": "VCC"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "ground",
+      "from": {
+        "componentId": "uno",
+        "pinId": "GND"
+      },
+      "to": {
+        "componentId": "sensor",
+        "pinId": "GND"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "data",
+      "from": {
+        "componentId": "uno",
+        "pinId": "D2"
+      },
+      "to": {
+        "componentId": "sensor",
+        "pinId": "DATA"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    }
+  ],
+  "programs": [
+    {
+      "componentId": "uno",
+      "language": "arduino-cpp",
+      "execution": "unavailable",
+      "source": "#include <DHT.h>\n#define DHTPIN 2\n#define DHTTYPE DHT11\n\n// Joy-IT KY-015 module, grille/front view with header down, left to right:\n// OUT (S/DATA) -> D2, VCC (+) -> 5V, GND (-) -> GND.\n// The module includes a pull-up: only these three wires are needed.\nDHT dht(DHTPIN, DHTTYPE);\nvoid setup() {\n  Serial.begin(9600);\n  dht.begin();\n}\nvoid loop() {\n  delay(2000);\n  float humidity = dht.readHumidity();\n  float temperature = dht.readTemperature();\n  if (isnan(humidity) || isnan(temperature)) {\n    Serial.println(\"DHT11: read failed\");\n  } else {\n    Serial.print(\"Humidity: \");\n    Serial.print(humidity, 0);\n    Serial.print(\" % | Temperature: \");\n    Serial.print(temperature, 0);\n    Serial.println(\" C\");\n  }\n}\n"
+    }
+  ],
+  "viewport": {
+    "offset": {
+      "x": 20,
+      "y": 20
+    },
+    "zoom": 1
+  }
+}

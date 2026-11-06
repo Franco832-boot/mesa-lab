@@ -2,11 +2,15 @@ import { componentDefinitions } from '../model/components';
 import type { CircuitProject } from '../model/types';
 import { pinKey } from './topology';
 import type { SimulationInputs, SimulationIssue } from './types';
+import { validDhtEnvironment } from '../model/dht11';
 
 export function validateInputs(project: CircuitProject, inputs: SimulationInputs): SimulationIssue[] {
   const components = new Map(project.components.map((component) => [component.id, component]));
   const issues: SimulationIssue[] = [];
   const invalid = (componentIds: string[], pinIds: string[] = []) => issues.push({ code: 'invalid-input', severity: 'error', componentIds, pinIds });
+  for (const [id, environment] of Object.entries(inputs.dht11 ?? {})) {
+    if (components.get(id)?.kind !== 'dht11' || !validDhtEnvironment(environment)) invalid([id]);
+  }
   for (const [id, pressed] of Object.entries(inputs.buttons ?? {})) {
     if (components.get(id)?.kind !== 'pushbutton' || typeof pressed !== 'boolean') invalid([id]);
   }

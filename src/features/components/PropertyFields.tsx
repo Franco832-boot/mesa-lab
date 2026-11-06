@@ -5,6 +5,7 @@ import type { TranslationKey } from '../../locales/es/messages';
 import { useLocale } from '../../locales/useLocale';
 import { ledColors } from '../../model/components';
 import { ledOptions } from './catalog';
+import { DHT11_LIMITS } from '../../model/dht11';
 
 export function NumberProperty({
   label,
@@ -72,6 +73,13 @@ export function PropertyFields({
 }) {
   const { t } = useLocale();
   switch (component.kind) {
+    case 'dht11': return <>
+      <NumberProperty label="dhtTemperature" value={component.properties.temperature} min={DHT11_LIMITS.temperatureMin} max={DHT11_LIMITS.temperatureMax}
+        onCommit={(temperature) => onUpdate({ kind: 'dht11', properties: { ...component.properties, temperature } })} />
+      <NumberProperty label="dhtHumidity" value={component.properties.humidity} min={DHT11_LIMITS.humidityMin} max={DHT11_LIMITS.humidityMax}
+        onCommit={(humidity) => onUpdate({ kind: 'dht11', properties: { ...component.properties, humidity } })} />
+      <p className="inspector-hint">{t('dhtModelNote')}</p>
+    </>;
     case 'resistor':
       return (
         <NumberProperty

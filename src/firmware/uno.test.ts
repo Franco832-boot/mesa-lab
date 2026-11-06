@@ -79,10 +79,10 @@ describe('bounded direct-GPIO Arduino source subset', () => {
   it.each([
     'void setup(){}', 'void setup(){}void loop(){ unknown(13); }',
     'void setup(){}void loop(){while(true){digitalWrite(13,HIGH);}}',
-    'float pin=13;void setup(){}void loop(){delay(1000);}',
+    'double pin=13;void setup(){}void loop(){delay(1000);}',
     '#include <ESP8266WiFi.h>\nvoid setup(){}void loop(){delay(1000);}',
     'void setup(){}void loop(){WiFi.begin();delay(1000);}',
-    'void setup(){}void loop(){Serial.println("x");delay(1000);}',
+    'void setup(){}void loop(){Serial.available();delay(1000);}',
     'void setup(){}void loop(){delay(1000)}',
     'void setup(){}void setup(){}void loop(){}',
     '/* unclosed void setup(){}void loop(){}',

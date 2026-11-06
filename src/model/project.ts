@@ -12,6 +12,8 @@ import { normalizeVirtualNetworkConfig, validateVirtualNetworkConfig } from './v
 import { MAX_PROGRAM_SOURCE_LENGTH, validProgramFiles } from './programFiles';
 export { MAX_PROGRAM_SOURCE_LENGTH } from './programFiles';
 import { validateAttachments } from './breadboard';
+import { validDhtEnvironment } from './dht11';
+import { migrateDht11Modules } from './dht11Migration';
 
 export const STORAGE_KEY = 'mesa.project.v1';
 export const MAX_PROJECT_BYTES = 2_000_000;
@@ -101,6 +103,7 @@ function validProperties(kind: unknown, value: unknown): boolean {
       );
     case 'power-supply':
       return finite(value.voltage) && value.voltage >= 0 && value.voltage <= 60;
+    case 'dht11': return finite(value.temperature) && finite(value.humidity) && validDhtEnvironment({ temperature: value.temperature, humidity: value.humidity });
     default:
       return false;
   }
@@ -141,6 +144,7 @@ function normalizeComponent(item: ElectronicComponent): ElectronicComponent {
       : {}),
   };
   switch (item.kind) {
+    case 'dht11': return { ...base, kind: item.kind, properties: { temperature: item.properties.temperature, humidity: item.properties.humidity } };
     case 'arduino-uno':
       return { ...base, kind: item.kind, properties: { logicVoltage: 5 } };
     case 'esp8266':
@@ -234,11 +238,12 @@ export function parseProject(source: string): CircuitProject {
     value.viewport.zoom > MAX_ZOOM
   )
     throw new Error('invalid-project');
-  const components: ElectronicComponent[] = value.components.map(normalizeComponent);
+  const migrated = migrateDht11Modules(value.components.map(normalizeComponent), value.wires);
+  const components = migrated.components;
   const ids = new Set(components.map((item) => item.id));
   if (ids.size !== components.length) throw new Error('duplicate-component');
   validateAttachments(components);
-  const wires: Wire[] = value.wires.map((item: Wire) => {
+  const wires: Wire[] = migrated.wires.map((item: Wire) => {
     const normalizePin = (reference: PinReference): PinReference => {
       const owner = components.find((component) => component.id === reference.componentId);
       return {

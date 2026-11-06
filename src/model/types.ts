@@ -14,6 +14,7 @@ export type ComponentKind =
   | 'resistor'
   | 'pushbutton'
   | 'potentiometer'
+  | 'dht11'
   | 'power-supply';
 export type ElectricalPinType =
   | 'digital'
@@ -74,6 +75,7 @@ export type ElectronicComponent = ComponentBase &
     | { kind: 'resistor'; properties: { resistance: number } }
     | { kind: 'pushbutton'; properties: { normallyClosed: boolean } }
     | { kind: 'potentiometer'; properties: { resistance: number; ratio: number } }
+    | { kind: 'dht11'; properties: { temperature: number; humidity: number } }
     | { kind: 'power-supply'; properties: { voltage: number } }
   );
 export interface PinReference {

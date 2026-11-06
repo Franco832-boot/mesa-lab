@@ -6,6 +6,8 @@ import { conditionMessages, logicMessages } from '../simulation/messages';
 import { useLocale } from '../../locales/useLocale';
 import { gpioConfiguration, gpioPins, GPIO_CURRENT_LIMIT_A } from '../../sim/gpio';
 import { ownInput, pinKey } from '../../sim/topology';
+import { DHT11_LIMITS } from '../../model/dht11';
+import { NumberProperty } from './PropertyFields';
 
 /** Formats engine outputs and forwards controls; performs no electrical evaluation. */
 export function SimulationProperties({
@@ -28,6 +30,13 @@ export function SimulationProperties({
   return (
     <section className="simulation-properties" aria-label={t('electricalResults')}>
       <h4>{t('electricalResults')}</h4>
+      {component.kind === 'dht11' && running && <div data-testid="dht11-live">
+        <p>{t('dhtLive')}</p>
+        <NumberProperty label="dhtTemperature" value={ownInput(simulation.inputs.dht11, component.id)?.temperature ?? component.properties.temperature}
+          min={DHT11_LIMITS.temperatureMin} max={DHT11_LIMITS.temperatureMax} onCommit={(temperature) => simulation.setDht11(component.id, temperature, ownInput(simulation.inputs.dht11, component.id)?.humidity ?? component.properties.humidity)} />
+        <NumberProperty label="dhtHumidity" value={ownInput(simulation.inputs.dht11, component.id)?.humidity ?? component.properties.humidity}
+          min={DHT11_LIMITS.humidityMin} max={DHT11_LIMITS.humidityMax} onCommit={(humidity) => simulation.setDht11(component.id, ownInput(simulation.inputs.dht11, component.id)?.temperature ?? component.properties.temperature, humidity)} />
+      </div>}
       {!simulation.snapshot && <p>{t('simulationReady')}</p>}
       {result && (
         <dl className="electrical-values" data-testid="electrical-values">

@@ -20,6 +20,7 @@ export interface SimulationController extends SimulationState {
   setGpio(componentId: string, pinId: string, state: GpioState): void;
   setButton(componentId: string, pressed: boolean): void;
   setPotentiometer(componentId: string, ratio: number): void;
+  setDht11(componentId: string, temperature: number, humidity: number): void;
   connectDevice(componentId: string): void;
   disconnectDevice(componentId: string): void;
   requestHttp(request: VirtualHttpRequest): void;
@@ -100,6 +101,7 @@ export function useSimulation(
     setGpio: (componentId, pinId, gpio) => send({ type: 'gpio', componentId, pinId, state: gpio }),
     setButton: (componentId, pressed) => send({ type: 'button', componentId, pressed }),
     setPotentiometer: (componentId, ratio) => send({ type: 'potentiometer', componentId, ratio }),
+    setDht11: (componentId, temperature, humidity) => send({ type: 'dht11', componentId, temperature, humidity }),
     connectDevice: (componentId) => send({ type: 'connect', componentId }),
     disconnectDevice: (componentId) => send({ type: 'disconnect', componentId }),
     requestHttp: (request) => send({ type: 'http', request }),

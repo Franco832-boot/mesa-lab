@@ -15,7 +15,7 @@ import { Inspector } from './Inspector';
 const noop = () => undefined;
 const simulation: SimulationController = {
   ...initialSimulation(), start: noop, pause: noop, stop: noop, reset: noop,
-  runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setPotentiometer: noop,
+  runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setDht11: noop, setPotentiometer: noop,
 };
 afterEach(() => vi.unstubAllGlobals());
 const setLocale = (locale: string) => vi.stubGlobal('localStorage', { getItem: () => locale });

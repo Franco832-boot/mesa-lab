@@ -14,8 +14,10 @@ export function convert(
   board: BoardKind,
   at: SourceSpan,
 ): Value {
+  if (type === 'float') return { type, value: Math.fround(Number(value)) };
   if (type === 'bool') return { type, value: Number(value !== 0 && value !== 0n) };
-  const integer = BigInt(value);
+  if (typeof value === 'number' && !Number.isFinite(value)) return fail('type-error', at);
+  const integer = typeof value === 'bigint' ? value : BigInt(Math.trunc(value));
   if (type === 'unsigned long')
     return { type, value: Number(((integer % UINT_MODULUS) + UINT_MODULUS) % UINT_MODULUS) };
   const bits = type === 'int' && board === 'arduino-uno' ? 16n : 32n;
@@ -24,7 +26,12 @@ export function convert(
   return { type, value: Number(integer) };
 }
 export function integerLiteral(token: string, board: BoardKind, at: SourceSpan): Value | null {
-  if (!/^[0-9]/.test(token)) return null;
+  if (!/^[0-9.]/.test(token)) return null;
+  if (/^(?:(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+[eE][+-]?[0-9]+)(?:[eE][+-]?[0-9]+)?[fF]?|[0-9]+[fF])$/.test(token)) {
+    const value = Number(token.replace(/[fF]$/, ''));
+    if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) return fail('invalid-value', at);
+    return { type: 'float', value: Math.fround(value) };
+  }
   const match = /^(0|[1-9][0-9]*)([uU][lL]?|[lL][uU]?)?$/.exec(token);
   if (!match?.[1]) return fail('invalid-value', at);
   const n = Number(match[1]),
@@ -58,6 +65,24 @@ export function binary(
   board: BoardKind,
   at: SourceSpan,
 ): Value {
+  if (a.type === 'float' || b.type === 'float') {
+    const left = a.value, right = b.value;
+    switch (operator) {
+      case '+': return { type: 'float', value: Math.fround(left + right) };
+      case '-': return { type: 'float', value: Math.fround(left - right) };
+      case '*': return { type: 'float', value: Math.fround(left * right) };
+      case '/': return { type: 'float', value: Math.fround(left / right) };
+      case '%': return fail('type-error', at);
+      case '<': return { type: 'bool', value: Number(left < right) };
+      case '<=': return { type: 'bool', value: Number(left <= right) };
+      case '>': return { type: 'bool', value: Number(left > right) };
+      case '>=': return { type: 'bool', value: Number(left >= right) };
+      case '==': return { type: 'bool', value: Number(left === right) };
+      case '!=': return { type: 'bool', value: Number(left !== right) };
+      case '&&': return { type: 'bool', value: Number(left !== 0 && right !== 0) };
+      case '||': return { type: 'bool', value: Number(left !== 0 || right !== 0) };
+    }
+  }
   const type =
     a.type === 'unsigned long' || b.type === 'unsigned long'
       ? 'unsigned long'

@@ -545,6 +545,27 @@ function BasicArtwork({
   const buttonLegs = componentDefinitions.pushbutton.sourcePins;
   const potLegs = componentDefinitions.potentiometer.sourcePins;
   switch (kind) {
+    case 'dht11': return <g data-testid="dht11-artwork">
+      <rect data-testid="dht11-pcb" width="16" height="22" rx="0.6" fill="#202c2a" stroke="#111b19" strokeWidth="0.3" />
+      {[1.1, 14.9].map((x) => <circle key={x} cx={x} cy="4.2" r="0.8" fill="#d1c6a6" stroke="#71776b" strokeWidth="0.25" />)}
+      <path d="M5.46 21V17.3H3.2V15M8 21V16.6H12.5V15M10.54 21H14.3V15" fill="none" stroke="#52634d" strokeWidth="0.3" />
+      <rect x="2.5" y="17.6" width="2.6" height="1.2" rx="0.15" fill="#bbc0b2" />
+      <rect x="2.9" y="17.6" width="1.8" height="1.2" fill="#292a28" />
+      <text x="3.8" y="18.45" textAnchor="middle" fontSize="0.75" fill="#ecebda">103</text>
+      <g transform="translate(2 .6)">
+        <rect width="12" height="15.5" rx="0.8" fill="#398ab1" stroke="#266b91" strokeWidth="0.3" />
+        <rect x="0.8" y="0.8" width="10.4" height="10.3" rx="0.4" fill="#2979a0" />
+        {Array.from({ length: 6 }, (_, row) => Array.from({ length: 4 }, (_, col) => <rect key={`${row}-${col}`} x={1.35 + col * 2.45}
+          y={1.4 + row * 1.5} width="1.9" height="0.85" rx="0.2" fill="#193f57" />))}
+        <text x="6" y="13.3" textAnchor="middle" fontSize="1.8" fontFamily="sans-serif" fill="#e1eff4">DHT11</text>
+      </g>
+      <text transform="translate(15.3 7) rotate(90)" fontSize="1.1" fill="#e3e7dc">KY-015</text>
+      <rect x="4.19" y="20.2" width="7.62" height="1.8" rx="0.2" fill="#131716" />
+      {componentDefinitions.dht11.sourcePins.map((pin) => <g key={pin.id}>
+        <text x={pin.position.x} y="19.8" textAnchor="middle" fontSize="1.3" fill="#eef0dd">{pin.id === 'DATA' ? 'S' : pin.id === 'VCC' ? '+' : '−'}</text>
+        <path d={`M${pin.position.x} 21V${pin.position.y}`} stroke="#c8c4ac" strokeWidth="0.65" />
+      </g>)}
+    </g>;
     case 'led':
       return (
         <g>

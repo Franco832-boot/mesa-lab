@@ -65,6 +65,15 @@ export function SimulationConsole({
           >
             <p>{t(locked ? 'simulationLocked' : 'simulationReady')}</p>
             {initialIssue && <p>{t(initialIssue)}</p>}
+            {Object.entries(firmware).map(([id, instance]) => {
+              const serial = instance.execution?.serial;
+              return serial?.baudRate ? <section className="serial-monitor" key={`serial-${id}`} aria-label={`${t('serialMonitor')} · ${id}`}>
+                <h3>{t('serialMonitor')} · {id} · {serial.baudRate} baud</h3>
+                <p>{t('serialVirtual')}</p>
+                <pre data-testid="serial-output" data-component-id={id} role="log" aria-live="polite" aria-label={`${t('serialMonitor')} · ${id}`}>{serial.output}</pre>
+                {serial.truncated && <p>{t('serialTruncated')}</p>}
+              </section> : null;
+            })}
             {failures.map(({ id, error, location }) => (
               <p
                 key={id}

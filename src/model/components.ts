@@ -214,6 +214,8 @@ const sourceDefinitions: Record<
   ComponentKind,
   { pins: PinDefinition[]; contactGroups: ContactGroup[] }
 > = {
+  dht11: { pins: [pin('DATA', 5.46, 27, 'digital', 'S · OUT / DATA'),
+    pin('VCC', 8, 27, 'power', '+ · VCC'), pin('GND', 10.54, 27, 'ground', '− · GND')], contactGroups: [] },
   'arduino-uno': {
     pins: unoPins.map((item) => {
       const gpio = /^A[0-5]$/.test(item.id)
@@ -305,6 +307,7 @@ function defineComponent(kind: ComponentKind): ComponentDefinition {
   };
 }
 export const componentDefinitions: Record<ComponentKind, ComponentDefinition> = {
+  dht11: defineComponent('dht11'),
   'arduino-uno': defineComponent('arduino-uno'),
   esp8266: defineComponent('esp8266'),
   breadboard: defineComponent('breadboard'),
@@ -369,6 +372,7 @@ export function createComponent(
 ): ElectronicComponent {
   const base = { id, position, rotation: 0 };
   switch (kind) {
+    case 'dht11': return { ...base, kind, properties: { temperature: 25, humidity: 50 } };
     case 'arduino-uno':
       return { ...base, kind, properties: { logicVoltage: 5 } };
     case 'esp8266':

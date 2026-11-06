@@ -1,5 +1,6 @@
 import type { CircuitProject } from '../model/types';
 import { potentiometerResistances } from '../model/potentiometer';
+import { DHT11_PULLUP_OHMS } from '../model/dht11';
 import type { ElectricalTopology } from './topology';
 import { boardModels } from './gpio';
 import { ownInput, pinKey } from './topology';
@@ -35,6 +36,12 @@ export function buildModels(
       branches.push({ id: `${component.id}:${kind}`, componentId: component.id, kind, a: node(a), b: node(b), value });
     };
     switch (component.kind) {
+      // Illustrative standby load: 100 µA at 5 V. Protocol pulses are API-modeled.
+      case 'dht11':
+        add('resistor', 'VCC', 'GND', 50000);
+        branches.push({ id: `${component.id}:resistor:pullup`, componentId: component.id,
+          kind: 'resistor', a: node('VCC'), b: node('DATA'), value: DHT11_PULLUP_OHMS });
+        break;
       case 'power-supply': add('source', 'positive', 'negative', component.properties.voltage); break;
       case 'resistor': add('resistor', '1', '2', component.properties.resistance); break;
       case 'led': add('led', 'anode', 'cathode', ledForwardVoltage[component.properties.color]); break;

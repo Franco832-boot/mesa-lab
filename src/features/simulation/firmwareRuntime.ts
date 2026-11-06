@@ -12,6 +12,21 @@ import { evaluateCircuit } from '../../sim/engine';
 import { ownInput, pinKey } from '../../sim/topology';
 import type { SimulationInputs } from '../../sim/types';
 import type { SimulationState } from './runtime';
+import type { FirmwareHost } from '../../firmware/ports';
+import { observeDht11 } from '../../sim/dht11';
+import type { DhtObservation } from '../../model/dht11';
+
+function circuitHost(project: CircuitProject, inputs: SimulationInputs, boardId: string): FirmwareHost {
+  let signature: string | null = null, observation: DhtObservation | null = null;
+  return { observeDht: (pinId, _timeUs, pendingGpio) => {
+    const next = `${pinId}:${pendingGpio.length}`;
+    if (next === signature) return observation;
+    const gpio = { ...inputs.gpio };
+    for (const event of pendingGpio) gpio[pinKey(boardId, event.pinId)] = event.state;
+    observation = observeDht11(project, { ...inputs, gpio }, boardId, pinId);
+    signature = next; return observation;
+  } };
+}
 
 export interface BoardExecution {
   source: string;
@@ -67,7 +82,7 @@ export function transitionFirmware(
     if (!board || (board.kind !== 'arduino-uno' && board.kind !== 'esp8266')) return previous;
     const inputs = clearBoardInputs(previous.inputs, project, board.id);
     try {
-      const initial = advanceArduino(createArduinoExecution(event.source, board.kind), 0);
+      const initial = advanceArduino(createArduinoExecution(event.source, board.kind), 0, MAX_ADVANCE_STEPS, circuitHost(project, inputs, board.id));
       const gpio = { ...inputs.gpio };
       for (const output of initial.gpio) gpio[pinKey(board.id, output.pinId)] = output.state;
       const nextInputs = { ...inputs, gpio };
@@ -107,7 +122,7 @@ export function transitionFirmware(
   for (const [id, instance] of Object.entries(previous.firmware)) {
     if (!instance.execution || instance.error) continue;
     try {
-      const advanced = advanceArduino(instance.execution, event.elapsedMs, budget);
+      const advanced = advanceArduino(instance.execution, event.elapsedMs, budget, circuitHost(project, inputs, id));
       firmware[id] = { ...instance, execution: advanced.execution };
       for (const output of advanced.gpio)
         events.push({

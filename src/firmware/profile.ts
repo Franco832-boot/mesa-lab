@@ -9,6 +9,8 @@ import type { Value } from './values';
 export function constantValue(token: string, board: BoardKind, at: SourceSpan): Value | null {
   const number = integerLiteral(token, board, at);
   if (number) return number;
+  if (token === 'DHT11') return { type: 'int', value: 11 };
+  if (token === 'NAN') return { type: 'float', value: NaN };
   if (token === 'true' || token === 'false') return { type: 'bool', value: Number(token === 'true') };
   if (token === 'HIGH' || token === 'OUTPUT') return { type: 'int', value: 1 };
   if (token === 'LOW' || token === 'INPUT') return { type: 'int', value: 0 };
@@ -26,6 +28,7 @@ export type BuiltinEffect =
 export function builtinEffect(name: GpioCall, args: readonly Value[], board: BoardKind, at: SourceSpan): BuiltinEffect {
   const value = args[0]?.value ?? fail('invalid-value', at);
   if (name === 'delay' || name === 'delayMicroseconds') {
+    if (!Number.isInteger(value)) return fail('invalid-value', at);
     const microseconds = value * (name === 'delay' ? 1000 : 1);
     if (!Number.isSafeInteger(microseconds) || microseconds < 0 || microseconds > MAX_DELAY_MS * 1000) fail('invalid-value', at);
     return { kind: 'wait', microseconds };

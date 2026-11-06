@@ -1887,6 +1887,9 @@ button {
 .waypoint-handle:hover {
   fill: #e6ddf8;
 }
+.serial-monitor { margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.serial-monitor h3 { font-size: 11px; margin: 0 0 4px; }
+.serial-monitor pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 monospace; color: #3d4854; }
 .waypoint-handle:focus-visible, .segment-handle:focus-visible {
   outline: none;
   stroke: #5934a4;

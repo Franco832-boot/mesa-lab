@@ -23,6 +23,9 @@ const breadboardUnitsPerMm = 6.25 / CONTACT_PITCH_MM;
 const ledUnitsPerMm = 46 / 5;
 const resistorUnitsPerMm = 74 / 6.3;
 export const physicalSpecs: Record<ComponentKind, PhysicalSpec> = {
+  // Approx. 16 × 27 mm overall, including the 5 mm header tails.
+  dht11: { model: 'Joy-IT KY-015 DHT11 module (S, +, −)', widthMm: 16, heightMm: 22,
+    sourceBody: { x: 0, y: 0, width: 16, height: 22 }, sourceViewBox: { x: -0.5, y: -0.5, width: 17, height: 28 } },
   'arduino-uno': {
     model: 'Arduino UNO R3',
     widthMm: 68.6,

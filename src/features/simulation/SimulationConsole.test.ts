@@ -39,8 +39,8 @@ describe('firmware runtime errors in the existing simulation console', () => {
     expect(state.firmware.uno?.error).toBe('name-error');
   });
   it.each([
-    { locale: 'es', source: 'void setup(){Serial.begin(9600);}void loop(){}', message: 'Código no admitido o incorrecto' },
-    { locale: 'en', source: 'void setup(){Serial.begin(9600);}void loop(){}', message: 'Unsupported or malformed source' },
+    { locale: 'es', source: 'void setup(){Serial.notSupported();}void loop(){}', message: 'Código no admitido o incorrecto' },
+    { locale: 'en', source: 'void setup(){Serial.notSupported();}void loop(){}', message: 'Unsupported or malformed source' },
     { locale: 'es', source: 'void setup(){pinMode(99,OUTPUT);}void loop(){delay(1000);}', message: 'Pin, modo, nivel lógico o espera no válidos' },
     { locale: 'en', source: 'void setup(){pinMode(99,OUTPUT);}void loop(){delay(1000);}', message: 'Invalid pin, mode, logic level or delay' },
   ])('shows $message in $locale without stopping the healthy board', ({ locale, source, message }) => {

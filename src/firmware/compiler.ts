@@ -15,8 +15,17 @@ import { builtinEffect, constantValue } from './profile';
 import { binary, unary } from './values';
 import type { Value } from './values';
 import { CLOCK_BUILTINS, GPIO_BUILTINS } from './builtins';
+import { LIBRARIES, methodSignature } from './libraries';
+import type { LibraryClass } from './libraries';
+import type { ObjectDeclaration } from './ast';
 
 type Operation =
+  | { op: 'construct'; name: string; className: LibraryClass; arity: number }
+  | { op: 'method'; receiver: string; name: string }
+  | { op: 'isnan' }
+  | { op: 'serial-begin' }
+  | { op: 'serial-text'; text: string; newline: boolean }
+  | { op: 'serial-number'; digits: boolean; newline: boolean }
   | { op: 'push'; value: Value }
   | { op: 'load'; name: string }
   | {
@@ -35,7 +44,7 @@ type Operation =
   | { op: 'call'; name: GpioCall; arity: number }
   | { op: 'jump'; target: number }
   | { op: 'branch'; target: number; when: boolean }
-  | { op: 'drop' | 'boolean' | 'enter' | 'leave' | 'start-loop' | 'repeat' };
+  | { op: 'drop' | 'boolean' | 'enter' | 'leave' | 'start-loop' | 'repeat' | 'return' };
 export type Instruction = Operation & { at: SourceSpan };
 export interface UnoProgram extends SketchAst {
   board: BoardKind;
@@ -64,12 +73,16 @@ const reserved = new Set([
   'bool',
   'unsigned',
   'const',
+  'float', 'isnan', 'DHT', 'Serial',
   ...Object.keys(GPIO_BUILTINS),
   ...Object.keys(CLOCK_BUILTINS),
 ]);
 
 function references(value: Expression, name: string): boolean {
   switch (value.kind) {
+    case 'string': return false;
+    case 'isnan': return references(value.value, name);
+    case 'method': return value.receiver === name || value.args.some((arg) => references(arg, name));
     case 'atom':
       return value.token === name;
     case 'clock':
@@ -88,6 +101,7 @@ function references(value: Expression, name: string): boolean {
 class Compiler {
   private code: Instruction[] = [];
   private scopes: Map<string, Binding>[] = [new Map()];
+  private objects = new Map<string, LibraryClass>([['Serial', 'Serial']]);
   constructor(private readonly board: BoardKind) {}
   private emit(operation: Operation, at: SourceSpan): number {
     if (this.code.length >= MAX_AST_NODES * 8) fail('instruction-limit', at);
@@ -130,9 +144,33 @@ class Compiler {
         return null;
     }
   }
-  private expression(value: Expression): void {
+  private expression(value: Expression, allowVoid = false): void {
     const at = value.at;
     switch (value.kind) {
+      case 'string': return fail('type-error', at);
+      case 'isnan': this.expression(value.value); this.emit({ op: 'isnan' }, at); return;
+      case 'method': {
+        const type = this.objects.get(value.receiver);
+        if (!type) return fail('name-error', at);
+        const signature = methodSignature(type, value.name);
+        if (!signature) return fail('unsupported-syntax', at);
+        if (value.args.length < signature.minArgs || value.args.length > signature.maxArgs || (!allowVoid && signature.result === 'void')) return fail('type-error', at);
+        if (type === 'Serial') {
+          const argument = value.args[0];
+          if (value.name === 'begin') {
+            if (!argument) return fail('type-error', at);
+            this.expression(argument); this.emit({ op: 'serial-begin' }, at);
+          } else if (!argument || argument.kind === 'string') {
+            if (value.args.length > 1) return fail('type-error', at);
+            this.emit({ op: 'serial-text', text: argument?.kind === 'string' ? argument.value : '', newline: value.name === 'println' }, at);
+          } else {
+            for (const arg of value.args) this.expression(arg);
+            this.emit({ op: 'serial-number', digits: value.args.length === 2, newline: value.name === 'println' }, at);
+          }
+          this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else this.emit({ op: 'method', receiver: value.receiver, name: value.name }, at);
+        return;
+      }
       case 'atom': {
         const constant = constantValue(value.token, this.board, at);
         if (constant) this.emit({ op: 'push', value: constant }, at);
@@ -214,7 +252,7 @@ class Compiler {
   private declaration(value: Declaration, global = false): void {
     const scope = this.scopes.at(-1) ?? fail('name-error', value.at);
     if (
-      scope.has(value.name) ||
+      scope.has(value.name) || this.objects.has(value.name) ||
       reserved.has(value.name) ||
       constantValue(value.name, this.board, value.at)
     )
@@ -244,6 +282,7 @@ class Compiler {
   }
   private statement(value: Statement): void {
     switch (value.kind) {
+      case 'return': this.emit({ op: 'return' }, value.at); return;
       case 'empty':
         return;
       case 'block':
@@ -253,7 +292,7 @@ class Compiler {
         this.declaration(value);
         return;
       case 'expression':
-        this.expression(value.value);
+        this.expression(value.value, true);
         this.emit({ op: 'drop' }, value.at);
         return;
       case 'call': {
@@ -278,13 +317,24 @@ class Compiler {
   }
   compile(ast: SketchAst): UnoProgram {
     const at = { offset: 0, line: 1, column: 1 };
-    for (const declaration of ast.globals) this.declaration(declaration, true);
+    for (const declaration of ast.globals) {
+      if (declaration.kind === 'construct') this.construct(declaration, ast.headers);
+      else this.declaration(declaration, true);
+    }
     this.scoped(ast.setup, ast.setup[0]?.at ?? at);
     this.emit({ op: 'start-loop' }, at);
     const loopPc = this.code.length;
     this.scoped(ast.loop, ast.loop[0]?.at ?? at);
     this.emit({ op: 'repeat' }, at);
     return { ...ast, board: this.board, code: this.code, loopPc };
+  }
+  private construct(value: ObjectDeclaration, headers: readonly string[]): void {
+    const contract = LIBRARIES[value.className];
+    if (!contract.header || !headers.includes(contract.header)) return fail('unsupported-syntax', value.at);
+    if (this.objects.has(value.name) || reserved.has(value.name) || this.scopes.some((scope) => scope.has(value.name)) || constantValue(value.name, this.board, value.at)) return fail('name-error', value.at);
+    for (const arg of value.args) this.expression(arg);
+    this.emit({ op: 'construct', name: value.name, className: value.className, arity: value.args.length }, value.at);
+    this.objects.set(value.name, value.className);
   }
 }
 

@@ -1,4 +1,5 @@
 import type { BoardKind, CircuitProject, GpioState, LogicLevel } from '../model/types';
+import type { DhtEnvironment } from '../model/dht11';
 
 export type ComponentCondition = 'normal' | 'active' | 'warning' | 'overheated' | 'damaged';
 export type DiagnosticCode =
@@ -24,6 +25,7 @@ export interface SimulationIssue {
   pinIds: string[];
 }
 export interface SimulationInputs {
+  dht11?: Readonly<Record<string, DhtEnvironment>>;
   gpio?: Readonly<Record<string, GpioState>>;
   /** Physical pressed state, independent of normallyClosed project configuration. */
   buttons?: Readonly<Record<string, boolean>>;

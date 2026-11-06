@@ -7,6 +7,11 @@ import { builtinEffect } from './profile';
 import { binary, convert, unary } from './values';
 import type { Value } from './values';
 import { CLOCK_BUILTINS } from './builtins';
+import type { FirmwareHost } from './ports';
+import { constructDht, readDht } from './dhtRuntime';
+import type { DhtObject, HardwareSample } from './dhtRuntime';
+import { appendSerial, initialSerial, serialNumber } from './serial';
+import type { SerialState } from './serial';
 
 /** A polling loop runs once per virtual millisecond. This is not CPU cycle timing. */
 export const LOOP_QUANTUM_US = 1000;
@@ -26,7 +31,10 @@ export interface UnoExecution {
   loopWaited: boolean;
   scopes: readonly ReadonlyMap<string, Variable>[];
   operands: readonly Value[];
-  modes: Readonly<Record<string, 'input' | 'output'>>;
+  objects: ReadonlyMap<string, DhtObject>;
+  hardware: ReadonlyMap<string, HardwareSample>;
+  serial: SerialState;
+  modes: Readonly<Record<string, GpioState['mode']>>;
   levels: Readonly<Record<string, 'HIGH' | 'LOW'>>;
 }
 export interface UnoGpioEvent { atMs: number; pinId: string; state: GpioState }
@@ -39,11 +47,11 @@ export interface UnoAdvanceResult {
 export function initialExecution(program: UnoProgram): UnoExecution {
   return { program, board: program.board, timeUs: 0, timeMs: 0, phase: 'setup', pc: 0,
     wakeAtUs: null, wakeReason: null, wakeAt: null, pendingUntilUs: null, loopWaited: false,
-    scopes: [new Map()], operands: [], modes: {}, levels: {} };
+    scopes: [new Map()], operands: [], objects: new Map(), hardware: new Map(), serial: initialSerial(), modes: {}, levels: {} };
 }
 
 /** Bounded VM: even expression evaluation suspends at individual instructions. */
-export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, budget = MAX_ADVANCE_STEPS): UnoAdvanceResult {
+export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, budget = MAX_ADVANCE_STEPS, host?: FirmwareHost): UnoAdvanceResult {
   const target = (previous.pendingUntilUs ?? previous.timeUs) + elapsedUs;
   if (!Number.isSafeInteger(elapsedUs) || elapsedUs < 0 || !Number.isSafeInteger(target)
     || !Number.isInteger(budget) || budget < 1 || budget > MAX_ADVANCE_STEPS) return fail('invalid-value');
@@ -52,10 +60,12 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
   const scopes = previous.scopes.map((scope) => new Map(scope));
   const operands = [...previous.operands], modes = { ...previous.modes }, levels = { ...previous.levels };
   const gpio: UnoGpioEvent[] = [];
+  const objects = new Map(previous.objects), hardware = new Map(previous.hardware);
+  let serial = previous.serial;
   let steps = 0;
   const finish = (yielded: boolean): UnoAdvanceResult => ({
     execution: { ...previous, timeUs, timeMs: timeUs / 1000, phase, pc, wakeAtUs, wakeReason, wakeAt: wakeAtUs === null ? null : wakeAtUs / 1000,
-      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels },
+      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial },
     gpio, yielded, steps,
   });
   const pop = (at: SourceSpan): Value => operands.pop() ?? fail('type-error', at);
@@ -73,6 +83,12 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
     const converted = convert(value.value, variable.type, previous.board, at);
     scope.set(name, { ...variable, value: converted }); return converted;
   };
+  const repeatLoop = (at: SourceSpan) => {
+    pc = previous.program.loopPc;
+    if (!loopWaited) { wakeAtUs = timeUs + LOOP_QUANTUM_US; wakeReason = 'cooperative'; }
+    loopWaited = false;
+    if (wakeAtUs !== null && !Number.isSafeInteger(wakeAtUs)) fail('invalid-value', at);
+  };
   for (;;) {
     if (wakeAtUs !== null) {
       if (wakeAtUs > target) { timeUs = target; return finish(false); }
@@ -84,6 +100,41 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
     const at = instruction.at;
     steps++;
     switch (instruction.op) {
+      case 'construct': {
+        const type = pop(at).value, pin = pop(at).value;
+        if (instruction.className !== 'DHT' || instruction.arity !== 2) return fail('unsupported-syntax', at);
+        objects.set(instruction.name, constructDht(pin, type, previous.board, at)); break;
+      }
+      case 'method': {
+        const object = objects.get(instruction.receiver) ?? fail('name-error', at);
+        if (instruction.name === 'begin') {
+          if (previous.board === 'esp8266' && object.pinId === 'D0') return fail('invalid-value', at);
+          objects.set(instruction.receiver, { ...object, beganAtUs: timeUs, attemptAtUs: null, sample: null });
+          modes[object.pinId] = 'input-pullup'; levels[object.pinId] = 'HIGH';
+          gpio.push({ atMs: timeUs / 1000, pinId: object.pinId, state: { mode: 'input-pullup', level: 'FLOATING' } });
+          operands.push({ type: 'int', value: 0 });
+        } else {
+          const observation = host?.observeDht(object.pinId, timeUs, gpio) ?? null;
+          const next = readDht(object, observation, timeUs, hardware);
+          objects.set(instruction.receiver, next);
+          operands.push({ type: 'float', value: next.sample ? instruction.name === 'readTemperature' ? next.sample.temperature : next.sample.humidity : NaN });
+        }
+        break;
+      }
+      case 'isnan': operands.push({ type: 'bool', value: Number(Number.isNaN(pop(at).value)) }); break;
+      case 'serial-begin': {
+        const baudRate = pop(at).value;
+        if (!Number.isInteger(baudRate) || baudRate < 1 || baudRate > 2000000) return fail('invalid-value', at);
+        serial = { ...serial, baudRate }; break;
+      }
+      case 'serial-text': serial = appendSerial(serial, instruction.text, instruction.newline); break;
+      case 'serial-number': {
+        const digits = instruction.digits ? pop(at).value : null;
+        if (digits !== null && (!Number.isInteger(digits) || digits < 0 || digits > 9)) return fail('invalid-value', at);
+        const value = pop(at);
+        if (digits !== null && value.type !== 'float') return fail('type-error', at);
+        serial = appendSerial(serial, serialNumber(value, digits), instruction.newline); break;
+      }
       case 'push': operands.push(instruction.value); break;
       case 'load': operands.push(read(locate(instruction.name, at).variable, at)); break;
       case 'clock': operands.push({ type: 'unsigned long', value: Math.floor(timeUs / CLOCK_BUILTINS[instruction.name].divisorUs) % 0x1_0000_0000 }); break;
@@ -116,11 +167,13 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
       case 'enter': scopes.push(new Map()); break;
       case 'leave': if (scopes.length < 2) return fail('type-error', at); scopes.pop(); break;
       case 'start-loop': phase = 'loop'; loopWaited = false; break;
+      case 'return':
+        scopes.splice(1); operands.length = 0;
+        if (phase === 'setup') { phase = 'loop'; pc = previous.program.loopPc; loopWaited = false; }
+        else repeatLoop(at);
+        break;
       case 'repeat':
-        pc = previous.program.loopPc;
-        if (!loopWaited) { wakeAtUs = timeUs + LOOP_QUANTUM_US; wakeReason = 'cooperative'; }
-        loopWaited = false;
-        if (wakeAtUs !== null && !Number.isSafeInteger(wakeAtUs)) return fail('invalid-value', at);
+        repeatLoop(at);
         break;
       case 'call': {
         const args = operands.splice(operands.length - instruction.arity, instruction.arity);
@@ -147,8 +200,8 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
   }
 }
 
-export function advanceArduino(previous: UnoExecution, elapsedMs: number, budget = MAX_ADVANCE_STEPS): UnoAdvanceResult {
+export function advanceArduino(previous: UnoExecution, elapsedMs: number, budget = MAX_ADVANCE_STEPS, host?: FirmwareHost): UnoAdvanceResult {
   const scaled = elapsedMs * 1000, microseconds = Math.round(scaled);
   if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || Math.abs(scaled - microseconds) > 0.000001) return fail('invalid-value');
-  return advanceArduinoMicros(previous, microseconds, budget);
+  return advanceArduinoMicros(previous, microseconds, budget, host);
 }

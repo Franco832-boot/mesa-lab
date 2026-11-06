@@ -16,6 +16,7 @@ export interface CatalogEntry {
   category: 'boards' | 'basic';
 }
 export const catalog: CatalogEntry[] = [
+  { kind: 'dht11', name: 'dht11_name', description: 'dht11_description', category: 'basic' },
   {
     kind: 'arduino-uno',
     name: 'arduino-uno_name',

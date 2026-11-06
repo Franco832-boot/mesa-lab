@@ -1,0 +1,161 @@
+{
+  "format": "mesa-circuit",
+  "version": 1,
+  "id": "dht-fixture",
+  "name": "Legacy SIP-4 mounted sensor",
+  "components": [
+    {
+      "id": "uno",
+      "kind": "arduino-uno",
+      "position": {
+        "x": 50,
+        "y": -300
+      },
+      "rotation": 0,
+      "properties": {
+        "logicVoltage": 5
+      }
+    },
+    {
+      "id": "bb",
+      "kind": "breadboard",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0,
+      "properties": {
+        "columns": 63
+      }
+    },
+    {
+      "id": "sensor",
+      "kind": "dht11",
+      "position": {
+        "x": 97.92,
+        "y": -25.18528
+      },
+      "rotation": 0,
+      "properties": {
+        "temperature": 25,
+        "humidity": 50
+      },
+      "attachments": [
+        {
+          "pinId": "VCC",
+          "breadboardId": "bb",
+          "holeId": "b10"
+        },
+        {
+          "pinId": "DATA",
+          "breadboardId": "bb",
+          "holeId": "b11"
+        },
+        {
+          "pinId": "NC",
+          "breadboardId": "bb",
+          "holeId": "b12"
+        },
+        {
+          "pinId": "GND",
+          "breadboardId": "bb",
+          "holeId": "b13"
+        }
+      ]
+    },
+    {
+      "id": "external-pullup",
+      "kind": "resistor",
+      "position": {
+        "x": 250,
+        "y": -80
+      },
+      "rotation": 0,
+      "properties": {
+        "resistance": 4700
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "vcc",
+      "from": {
+        "componentId": "uno",
+        "pinId": "5V"
+      },
+      "to": {
+        "componentId": "bb",
+        "pinId": "a10"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "ground",
+      "from": {
+        "componentId": "uno",
+        "pinId": "GND"
+      },
+      "to": {
+        "componentId": "bb",
+        "pinId": "a13"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "data",
+      "from": {
+        "componentId": "uno",
+        "pinId": "D2"
+      },
+      "to": {
+        "componentId": "bb",
+        "pinId": "a11"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "bias-vcc",
+      "from": {
+        "componentId": "bb",
+        "pinId": "a10"
+      },
+      "to": {
+        "componentId": "external-pullup",
+        "pinId": "1"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "bias-data",
+      "from": {
+        "componentId": "external-pullup",
+        "pinId": "2"
+      },
+      "to": {
+        "componentId": "bb",
+        "pinId": "a11"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    }
+  ],
+  "programs": [
+    {
+      "componentId": "uno",
+      "language": "arduino-cpp",
+      "execution": "unavailable",
+      "source": "#include <DHT.h>\n#define DHTPIN 2\n#define DHTTYPE DHT11\n\n// Joy-IT KY-015 module, grille/front view with header down, left to right:\n// OUT (S/DATA) -> D2, VCC (+) -> 5V, GND (-) -> GND.\n// The module includes a pull-up: only these three wires are needed.\nDHT dht(DHTPIN, DHTTYPE);\nvoid setup() {\n  Serial.begin(9600);\n  dht.begin();\n}\nvoid loop() {\n  delay(2000);\n  float humidity = dht.readHumidity();\n  float temperature = dht.readTemperature();\n  if (isnan(humidity) || isnan(temperature)) {\n    Serial.println(\"DHT11: read failed\");\n  } else {\n    Serial.print(\"Humidity: \");\n    Serial.print(humidity, 0);\n    Serial.print(\" % | Temperature: \");\n    Serial.print(temperature, 0);\n    Serial.println(\" C\");\n  }\n}\n"
+    }
+  ],
+  "viewport": {
+    "offset": {
+      "x": 20,
+      "y": 20
+    },
+    "zoom": 1
+  }
+}

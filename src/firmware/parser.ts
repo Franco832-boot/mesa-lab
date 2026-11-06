@@ -1,4 +1,5 @@
-import type { BinaryOperator, Declaration, Expression, SketchAst, Statement, ValueType } from './ast';
+import type { BinaryOperator, Declaration, Expression, ObjectDeclaration, SketchAst, Statement, ValueType } from './ast';
+import { isLibraryClass, LIBRARIES } from './libraries';
 import { fail, MAX_AST_NODES, MAX_NESTING, MAX_PROGRAM_INSTRUCTIONS } from './errors';
 import { tokenize } from './lexer';
 import type { Token } from './lexer';
@@ -44,14 +45,19 @@ class Parser {
     if (++this.nodes > MAX_AST_NODES) fail('instruction-limit', value.at);
     this.heights.set(value, height); return value;
   }
-  private isDeclaration(): boolean { return ['const', 'int', 'bool', 'long', 'unsigned'].includes(this.peek().text); }
+  private isDeclaration(): boolean { return ['const', 'int', 'bool', 'long', 'unsigned', 'float'].includes(this.peek().text); }
+  private arguments(): Expression[] {
+    this.expect('('); const args: Expression[] = [];
+    if (this.peek().text !== ')') do { args.push(this.expression()); } while (this.match(','));
+    this.expect(')'); return args;
+  }
   private declaration(): Declaration {
     const at = this.peek().at;
     const constant = this.match('const');
     const type = this.take();
     let valueType: ValueType;
     if (type.text === 'unsigned') { this.expect('long'); valueType = 'unsigned long'; }
-    else if (type.text === 'int' || type.text === 'bool' || type.text === 'long') valueType = type.text;
+    else if (type.text === 'int' || type.text === 'bool' || type.text === 'long' || type.text === 'float') valueType = type.text;
     else return fail('unsupported-syntax', type.at);
     const name = this.take();
     if (name.kind !== 'name') fail('unsupported-syntax', name.at);
@@ -73,6 +79,7 @@ class Parser {
       if (token.text === '{') return { kind: 'block', body: this.body(), at };
       if (this.isDeclaration()) return this.declaration();
       if (this.match(';')) return { kind: 'empty', at };
+      if (this.match('return')) { this.expect(';'); return { kind: 'return', at }; }
       if (this.match('if')) {
         this.expect('('); const condition = this.expression(); this.expect(')');
         const then = this.statement();
@@ -127,10 +134,21 @@ class Parser {
         return this.expressionNode({ kind: 'update', name: name.text, operator: token.text, prefix: true, at });
       }
       let value: Expression;
-      if (token.text === '(') { value = this.expression(); this.expect(')'); }
-      else if (token.kind === 'name' && this.match('(')) {
-        if (!isClockCall(token.text)) fail('unsupported-syntax', at);
-        this.expect(')'); value = this.expressionNode({ kind: 'clock', name: token.text, at });
+      if (token.kind === 'string') {
+        const text: unknown = JSON.parse(token.text);
+        if (typeof text !== 'string') fail('unsupported-syntax', at);
+        value = this.expressionNode({ kind: 'string', value: text, at });
+      } else if (token.text === '(') { value = this.expression(); this.expect(')'); }
+      else if (token.kind === 'name' && this.match('.')) {
+        const method = this.take();
+        if (method.kind !== 'name') fail('unsupported-syntax', method.at);
+        const args = this.arguments();
+        value = this.expressionNode({ kind: 'method', receiver: token.text, name: method.text, args, at }, args);
+      } else if (token.kind === 'name' && this.peek().text === '(') {
+        const args = this.arguments();
+        if (token.text === 'isnan' && args.length === 1 && args[0]) value = this.expressionNode({ kind: 'isnan', value: args[0], at }, args);
+        else if (isClockCall(token.text) && args.length === 0) value = this.expressionNode({ kind: 'clock', name: token.text, at });
+        else return fail('unsupported-syntax', at);
       } else if (token.kind === 'name' || token.kind === 'number') value = this.expressionNode({ kind: 'atom', token: token.text, at });
       else return fail('unsupported-syntax', at);
       const next = this.peek();
@@ -142,8 +160,26 @@ class Parser {
     });
   }
   parse(): SketchAst {
-    const sections = new Map<string, readonly Statement[]>(), globals: Declaration[] = [];
+    const sections = new Map<string, readonly Statement[]>(), globals: (Declaration | ObjectDeclaration)[] = [], headers: string[] = [];
     while (this.peek().kind !== 'end') {
+      const token = this.peek();
+      if (token.kind === 'header') { headers.push(this.take().text); continue; }
+      if (token.kind === 'define') {
+        this.take();
+        const [name, value] = token.text.split(' ');
+        if (!name || !value) fail('unsupported-syntax', token.at);
+        if (++this.statements > MAX_PROGRAM_INSTRUCTIONS || ++this.nodes > MAX_AST_NODES) fail('instruction-limit', token.at);
+        globals.push({ kind: 'declare', name, valueType: value.includes('.') ? 'float' : /[uU][lL]|[lL][uU]/.test(value) ? 'unsigned long' : 'long', constant: true,
+          initializer: this.expressionNode({ kind: 'atom', token: value, at: token.at }), at: token.at }); continue;
+      }
+      if (isLibraryClass(token.text) && LIBRARIES[token.text].constructorArity !== null) {
+        this.take(); const name = this.take();
+        if (name.kind !== 'name') fail('unsupported-syntax', name.at);
+        const args = this.arguments(); this.expect(';');
+        if (args.length !== LIBRARIES[token.text].constructorArity) fail('type-error', token.at);
+        if (++this.statements > MAX_PROGRAM_INSTRUCTIONS || ++this.nodes > MAX_AST_NODES) fail('instruction-limit', token.at);
+        globals.push({ kind: 'construct', className: token.text, name: name.text, args, at: token.at }); continue;
+      }
       if (this.isDeclaration()) {
         if (++this.statements > MAX_PROGRAM_INSTRUCTIONS || ++this.nodes > MAX_AST_NODES) fail('instruction-limit', this.peek().at);
         globals.push(this.declaration()); continue;
@@ -154,7 +190,7 @@ class Parser {
     }
     const setup = sections.get('setup'), loop = sections.get('loop');
     if (!setup || !loop) fail('unsupported-syntax', this.peek().at);
-    return { globals, setup, loop };
+    return { globals, setup, loop, headers };
   }
 }
 

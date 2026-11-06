@@ -203,7 +203,7 @@ for (const [invalidBoard, locale, errorText] of [
   test(`invalid ${invalidBoard} firmware reports its error in ${locale} while the other board runs`, async (t) => {
     const document = firmwareFixture();
     document.programs = [
-      savedProgram('uno', invalidBoard === 'uno' ? 'void setup(){Serial.begin(9600);}void loop(){}' : blink()),
+      savedProgram('uno', invalidBoard === 'uno' ? 'void setup(){Serial.notSupported();}void loop(){}' : blink()),
       savedProgram('esp', invalidBoard === 'esp' ? 'void setup(){WiFi.begin();}void loop(){}' : blink('D1')),
     ];
     const page = await openFixture(harness.browser, t, document, { locale });

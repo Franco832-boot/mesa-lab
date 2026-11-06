@@ -87,9 +87,22 @@ export function evaluateCircuit(project: CircuitProject, inputs: SimulationInput
         state.condition = 'overheated';
         diagnostics.push({ code: 'resistor-overpower', severity: 'warning', componentIds: [component.id], pinIds: ['1', '2'] });
       }
-      if (!hasReturnPath(branch, models.branches)) {
+      // A digital sensor validates its supply and bus separately; DATA does
+      // not need the conducting series return path expected of passive loads.
+      if (component.kind !== 'dht11' && !hasReturnPath(branch, models.branches)) {
         const hasExternalWire = componentDefinitions[component.kind].pins.some((pin) => topology.connectedPins.has(pinKey(component.id, pin.id)));
         if (hasExternalWire) diagnostics.push({ code: 'open-circuit', severity: 'warning', componentIds: [component.id], pinIds: [] });
+      }
+    }
+    if (component.kind === 'dht11') {
+      const currents = branches.map((segment) => dc.currents.get(segment.id));
+      if (currents.every((current) => current !== undefined)) {
+        // Both model branches start at VCC: standby plus the loaded pull-up.
+        state.current = currents.reduce<number>((sum, current) => sum + (current ?? 0), 0);
+        state.power = branches.reduce((sum, segment) => {
+          const current = dc.currents.get(segment.id) ?? 0;
+          return sum + current * current * segment.value;
+        }, 0);
       }
     }
     if (component.kind === 'potentiometer') {

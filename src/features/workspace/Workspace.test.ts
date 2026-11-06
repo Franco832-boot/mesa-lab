@@ -11,7 +11,7 @@ const noop = () => undefined;
 const props: ComponentProps<typeof Workspace> = {
   wiperPreview: null, onWiperPreview: noop, onWiperCommit: noop, controlActive: false, libraryDrag: null,
   locked: false, simulation: { ...initialSimulation(), start: noop, pause: noop, stop: noop, reset: noop,
-    runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setPotentiometer: noop },
+    runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setDht11: noop, setPotentiometer: noop },
   components: [createComponent('resistor', { x: 100, y: 80 }, 'r'),
     createComponent('breadboard', { x: 0, y: 0 }, 'bb'), createComponent('potentiometer', { x: 200, y: 80 }, 'pot'),
     createComponent('arduino-uno', { x: 200, y: 200 }, 'uno'), createComponent('esp8266', { x: 400, y: 200 }, 'esp')],
