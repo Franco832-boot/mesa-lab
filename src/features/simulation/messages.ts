@@ -1,5 +1,10 @@
 import type { TranslationKey } from '../../locales/es/messages';
-import type { ComponentCondition, DiagnosticCode, PinResult, SimulationIssue } from '../../sim/types';
+import type {
+  ComponentCondition,
+  DiagnosticCode,
+  PinResult,
+  SimulationIssue,
+} from '../../sim/types';
 import type { UnoErrorCode } from '../../firmware/uno';
 
 export const firmwareErrorMessages: Record<UnoErrorCode, TranslationKey> = {
@@ -9,6 +14,10 @@ export const firmwareErrorMessages: Record<UnoErrorCode, TranslationKey> = {
   'instruction-limit': 'firmwareInstructionLimit',
   'step-limit': 'firmwareStepLimit',
   'pin-not-output': 'firmwareModeError',
+  'name-error': 'firmwareNameError',
+  'type-error': 'firmwareTypeError',
+  'arithmetic-error': 'firmwareArithmeticError',
+  'nesting-limit': 'firmwareNestingLimit',
 };
 
 export const conditionMessages: Record<ComponentCondition, TranslationKey> = {

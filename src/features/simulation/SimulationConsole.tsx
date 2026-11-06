@@ -34,7 +34,7 @@ export function SimulationConsole({
 }: SimulationConsoleProps) {
   const { t } = useLocale();
   const failures = Object.entries(firmware).flatMap(([id, instance]) =>
-    instance.error ? [{ id, error: instance.error }] : [],
+    instance.error ? [{ id, error: instance.error, location: instance.location }] : [],
   );
   return (
     <div className={`console-panel ${open ? 'open' : ''}`}>
@@ -65,9 +65,24 @@ export function SimulationConsole({
           >
             <p>{t(locked ? 'simulationLocked' : 'simulationReady')}</p>
             {initialIssue && <p>{t(initialIssue)}</p>}
-            {failures.map(({ id, error }) => (
-              <p key={id} role="alert" data-testid="firmware-error" data-component-id={id} data-code={error}>
-                <strong>{id} · {t('firmwareError')}</strong>: {t(firmwareErrorMessages[error])}
+            {failures.map(({ id, error, location }) => (
+              <p
+                key={id}
+                role="alert"
+                data-testid="firmware-error"
+                data-component-id={id}
+                data-code={error}
+              >
+                <strong>
+                  {id} · {t('firmwareError')}
+                </strong>
+                : {t(firmwareErrorMessages[error])}
+                {location && (
+                  <>
+                    {' '}
+                    · {t('firmwareLine')} {location.line}, {t('firmwareColumn')} {location.column}
+                  </>
+                )}
               </p>
             ))}
             {diagnostics && (

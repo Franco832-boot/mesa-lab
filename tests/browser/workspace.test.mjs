@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { brightness, openFixture, part, select, startHarness, status } from './harness.mjs';
 import { component, ledCircuit, project, wire } from './fixtures.mjs';
+import { readFileSync } from 'node:fs';
 
 let harness;
 before(async () => { harness = await startHarness(); }, { timeout: 30000 });
 after(async () => { await harness?.close(); });
 const panel = (page, tab) => page.locator(`#tool-panel-${tab}`);
+const codeBoard = (page, id) => panel(page, 'code').locator(`[data-testid="code-board-tab"][data-board-id="${id}"]`);
+async function selectedCodeBoard(page, id) {
+  assert.equal(await codeBoard(page, id).getAttribute('aria-selected'), 'true');
+}
 async function tools(page, tab) {
   if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('library-toggle').click();
   await page.getByTestId(`tool-tab-${tab}`).click();
@@ -70,6 +75,7 @@ function firmwareFixture() {
 const savedProgram = (componentId, source) => ({
   componentId, language: 'arduino-cpp', execution: 'unavailable', source,
 });
+const millisExample = readFileSync(new URL('../../examples/arduino/blink-without-delay.ino', import.meta.url), 'utf8');
 async function freezeClock(page) {
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
@@ -78,6 +84,47 @@ async function assertSameNode(handle, selector) {
   assert.equal(await handle.evaluate((node, selector) =>
     node.isConnected && node === document.querySelector(selector), selector), true);
 }
+
+test('millis Blink controls the electrical LED, pauses, resumes and resets without blocking the editor', async (t) => {
+  const document = firmwareFixture();
+  document.programs = [savedProgram('uno', millisExample.replace('1000UL', '64UL'))];
+  const page = await openFixture(harness.browser, t, document);
+  await freezeClock(page);
+  await page.getByTestId('simulation-start').click();
+  await brightness(page, 'led-uno', false);
+  await page.clock.runFor(64);
+  await brightness(page, 'led-uno', true);
+  assert.ok(Math.abs(Number(await part(page, 'led-uno').getAttribute('data-brightness')) - (5 - 2) / (330 + 40) / 0.02) < 1e-9);
+  await tools(page, 'code');
+  await page.getByTestId('board-code-editor').fill('// Edits apply only on the next start');
+  await page.getByTestId('simulation-pause').click();
+  await status(page, 'paused');
+  await page.clock.runFor(1024);
+  await brightness(page, 'led-uno', true);
+  await page.getByTestId('simulation-start').click();
+  await page.clock.runFor(64);
+  await brightness(page, 'led-uno', false);
+  await page.getByTestId('simulation-stop').click();
+  await status(page, 'stopped');
+  assert.equal(await page.getByTestId('firmware-error').count(), 0);
+});
+
+test('a large delay-free program yields so React can pause and stop execution', { timeout: 15000 }, async (t) => {
+  const document = firmwareFixture();
+  document.programs = [savedProgram('uno', `unsigned long n=0;
+    void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);}
+    void loop(){${'n+=1;'.repeat(400)}}`)];
+  const page = await openFixture(harness.browser, t, document);
+  await page.getByTestId('simulation-start').click();
+  await brightness(page, 'led-uno', true);
+  // Real browser timers and an animation frame must run alongside interpreter slices.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true))));
+  await page.getByTestId('simulation-pause').click({ timeout: 2000 });
+  await status(page, 'paused');
+  await page.getByTestId('simulation-stop').click({ timeout: 2000 });
+  await status(page, 'stopped');
+  await brightness(page, 'led-uno', false);
+});
 
 test('saved Blink runs from Start, advances the electrical LED, resumes without setup and stops', async (t) => {
   const document = firmwareFixture();
@@ -142,7 +189,9 @@ test('Start matches programs by board ID and runs main.ino instead of the first 
   await brightness(page, 'led-esp', false);
   await page.clock.runFor(250);
   await brightness(page, 'led-esp', true);
-  await page.clock.runFor(500);
+  await page.clock.runFor(250);
+  await brightness(page, 'led-esp', false);
+  await page.clock.runFor(250);
   await brightness(page, 'led-uno', false);
   await brightness(page, 'led-esp', true);
 });
@@ -381,12 +430,12 @@ test('code and IoT share automatic/manual board context and independent saved so
   await tools(page, 'code');
   const code = panel(page, 'code');
   const editor = code.getByTestId('board-code-editor');
-  assert.equal(await code.getByTestId('board-selector').inputValue(), 'uno');
-  assert.match(await code.getByTestId('active-board-name').textContent(), /Arduino UNO #1 · uno/);
+  await selectedCodeBoard(page, 'uno');
+  assert.match(await codeBoard(page, 'uno').textContent(), /Arduino UNO #1 · uno/);
   await editor.fill('// UNO source');
   await select(page, 'esp');
   await closeInspector(page);
-  assert.equal(await code.getByTestId('board-selector').inputValue(), 'esp');
+  await selectedCodeBoard(page, 'esp');
   assert.equal(await editor.inputValue(), '');
   await editor.fill('// ESP source');
   await tools(page, 'iot');
@@ -401,20 +450,20 @@ test('code and IoT share automatic/manual board context and independent saved so
   await editor.press('End');
   await editor.pressSequentially('\nr');
   assert.equal(await part(page, 'r').getAttribute('transform'), resistorTransform, 'Editor keys cannot rotate the selected resistor');
-  await code.getByTestId('board-selector').selectOption('esp');
+  await codeBoard(page, 'esp').click();
   assert.equal(await editor.inputValue(), '// ESP source');
   await select(page, 'r');
   await closeInspector(page);
-  assert.equal(await code.getByTestId('board-selector').inputValue(), 'esp', 'Selecting a passive component retains manual board context');
+  await selectedCodeBoard(page, 'esp');
   const saved = await save(page);
   assert.equal(saved.programs.find((program) => program.componentId === 'uno').source, '// UNO source\nr');
   assert.equal(saved.programs.find((program) => program.componentId === 'esp').source, '// ESP source');
   assert.ok(saved.programs.every((program) => program.execution === 'unavailable'));
   await page.reload();
   await tools(page, 'code');
-  await code.getByTestId('board-selector').selectOption('esp');
+  await codeBoard(page, 'esp').click();
   assert.equal(await editor.inputValue(), '// ESP source');
-  await code.getByTestId('board-selector').selectOption('uno');
+  await codeBoard(page, 'uno').click();
   assert.equal(await editor.inputValue(), '// UNO source\nr');
 });
 
@@ -563,7 +612,7 @@ test('explicit virtual HTTP routes drive only the addressed ESP electrical circu
   const expectedBrightness = (3.3 - 2) / (330 + 50) / 0.02;
   assert.ok(Math.abs(Number(await part(page, 'led-one').getAttribute('data-brightness')) - expectedBrightness) < 1e-9);
   await tools(page, 'code');
-  assert.equal(await panel(page, 'code').getByTestId('board-selector').inputValue(), 'esp-one');
+  await selectedCodeBoard(page, 'esp-one');
   await panel(page, 'code').getByTestId('board-code-editor').fill('// Stored source does not execute or replace virtual routes');
   await tools(page, 'iot');
   assert.equal(await selector.inputValue(), 'esp-one');

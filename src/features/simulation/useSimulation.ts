@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CircuitProject, GpioState } from '../../model/types';
 import type { VirtualHttpRequest } from '../../sim/network';
-import { nextFirmwareDelay } from './firmwareRuntime';
-import { initialSimulation, reconcileSimulationProject, simulationProjectStamp, transitionSimulation } from './runtime';
+import { nextFirmwareSlice } from './firmwareRuntime';
+import {
+  initialSimulation,
+  reconcileSimulationProject,
+  simulationProjectStamp,
+  transitionSimulation,
+} from './runtime';
 import type { SimulationEvent, SimulationState } from './runtime';
 
 export interface SimulationController extends SimulationState {
@@ -20,27 +25,69 @@ export interface SimulationController extends SimulationState {
   requestHttp(request: VirtualHttpRequest): void;
 }
 /** Runtime lives outside Redux Persist; only discrete input changes evaluate the engine. */
-export function useSimulation(project: CircuitProject, projectIdentity = project.id): SimulationController {
+export function useSimulation(
+  project: CircuitProject,
+  projectIdentity = project.id,
+): SimulationController {
   const [state, setState] = useState(initialSimulation);
-  const currentStamp = useMemo(() => simulationProjectStamp(project, projectIdentity),
-    [project.components, project.wires, projectIdentity]);
+  const latest = useRef(state);
+  const timer = useRef<number | null>(null);
+  const arm = useRef<() => void>(() => undefined);
+  const currentStamp = useMemo(
+    () => simulationProjectStamp(project, projectIdentity),
+    [project.components, project.wires, projectIdentity],
+  );
   const stamp = useRef(currentStamp);
   const document = useRef(project);
   document.current = project;
   const send = useCallback((event: SimulationEvent) => {
-    setState((previous) => transitionSimulation(previous, event, document.current));
+    const previous = latest.current;
+    const next = transitionSimulation(previous, event, document.current);
+    latest.current = next;
+    if (next !== previous) setState(next);
+    if (
+      event.type !== 'firmware-advance' &&
+      (next.status !== previous.status || next.firmware !== previous.firmware)
+    )
+      arm.current();
   }, []);
-  const delay = nextFirmwareDelay(state);
   useEffect(() => {
-    if (delay === null) return;
-    const timer = window.setTimeout(() => send({ type: 'firmware-advance', elapsedMs: delay }), Math.max(1, delay));
-    return () => window.clearTimeout(timer);
-  }, [state.firmware, state.status, delay, send]);
+    // The pump reads current transient state, rather than waiting for a React effect
+    // after every tick. React batching or a delayed render cannot lose timer events.
+    arm.current = () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = null;
+      const slice = nextFirmwareSlice(latest.current);
+      if (!slice) return;
+      timer.current = window.setTimeout(() => {
+        timer.current = null;
+        send({ type: 'firmware-advance', elapsedMs: slice.elapsedMs });
+        arm.current();
+      }, slice.waitMs);
+    };
+    arm.current();
+    return () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = null;
+      arm.current = () => undefined;
+    };
+  }, [send]);
   useEffect(() => {
     const before = stamp.current;
     const next = currentStamp;
     stamp.current = next;
-    setState((previous) => reconcileSimulationProject(previous, before, project, projectIdentity, next));
+    const reconciled = reconcileSimulationProject(
+      latest.current,
+      before,
+      project,
+      projectIdentity,
+      next,
+    );
+    if (reconciled !== latest.current) {
+      latest.current = reconciled;
+      setState(reconciled);
+      arm.current();
+    }
   }, [currentStamp]);
   return {
     ...state,

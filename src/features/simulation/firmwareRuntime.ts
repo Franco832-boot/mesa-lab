@@ -1,7 +1,13 @@
 import type { CircuitProject, GpioState } from '../../model/types';
 import { componentDefinitions } from '../../model/components';
-import { advanceArduino, createArduinoExecution, UnoExecutionError } from '../../firmware/uno';
+import {
+  advanceArduino,
+  createArduinoExecution,
+  MAX_ADVANCE_STEPS,
+  UnoExecutionError,
+} from '../../firmware/uno';
 import type { UnoErrorCode, UnoExecution } from '../../firmware/uno';
+import type { SourceSpan } from '../../firmware/errors';
 import { evaluateCircuit } from '../../sim/engine';
 import { ownInput, pinKey } from '../../sim/topology';
 import type { SimulationInputs } from '../../sim/types';
@@ -11,6 +17,7 @@ export interface BoardExecution {
   source: string;
   execution: UnoExecution | null;
   error: UnoErrorCode | null;
+  location?: SourceSpan | null;
 }
 export type FirmwareState = Readonly<Record<string, BoardExecution>>;
 export type FirmwareEvent =
@@ -31,8 +38,10 @@ function clearBoardInputs(
     gpio: Object.fromEntries(Object.entries(inputs.gpio ?? {}).filter(([key]) => !keys.has(key))),
   };
 }
-function failure(error: unknown): UnoErrorCode {
-  return error instanceof UnoExecutionError ? error.code : 'unsupported-syntax';
+function failure(error: unknown): { error: UnoErrorCode; location: SourceSpan | null } {
+  return error instanceof UnoExecutionError
+    ? { error: error.code, location: error.location }
+    : { error: 'unsupported-syntax', location: null };
 }
 /** Runs actual parsed source; GPIO events enter the ordinary electrical inputs. */
 export function transitionFirmware(
@@ -78,7 +87,7 @@ export function transitionFirmware(
         inputs,
         firmware: {
           ...previous.firmware,
-          [board.id]: { source: event.source, execution: null, error: failure(error) },
+          [board.id]: { source: event.source, execution: null, ...failure(error) },
         },
         snapshot: previous.status === 'stopped' ? null : evaluateCircuit(project, inputs),
       };
@@ -90,10 +99,15 @@ export function transitionFirmware(
   let inputs = previous.inputs;
   const events: { offset: number; id: string; pinId: string; state: GpioState }[] = [];
   let changed = false;
+  // Bound total interpreter work across all boards, including expression evaluation.
+  const active = Object.values(previous.firmware).filter(
+    (instance) => instance.execution && !instance.error,
+  ).length;
+  const budget = Math.max(1, Math.floor(MAX_ADVANCE_STEPS / Math.max(1, active)));
   for (const [id, instance] of Object.entries(previous.firmware)) {
     if (!instance.execution || instance.error) continue;
     try {
-      const advanced = advanceArduino(instance.execution, event.elapsedMs);
+      const advanced = advanceArduino(instance.execution, event.elapsedMs, budget);
       firmware[id] = { ...instance, execution: advanced.execution };
       for (const output of advanced.gpio)
         events.push({
@@ -104,7 +118,7 @@ export function transitionFirmware(
         });
       changed = true;
     } catch (error: unknown) {
-      firmware[id] = { ...instance, execution: null, error: failure(error) };
+      firmware[id] = { ...instance, execution: null, ...failure(error) };
       inputs = clearBoardInputs(inputs, project, id);
       changed = true;
     }
@@ -130,12 +144,38 @@ export function nextFirmwareDelay(state: SimulationState): number | null {
   const waits = Object.values(state.firmware).flatMap((instance) =>
     instance.execution && !instance.error
       ? [
-          Math.max(
-            0,
-            (instance.execution.wakeAt ?? instance.execution.timeMs) - instance.execution.timeMs,
-          ),
+          instance.execution.pendingUntilUs !== null
+            ? 0
+            : Math.max(
+                0,
+                ((instance.execution.wakeAtUs ?? instance.execution.timeUs) -
+                  instance.execution.timeUs) /
+                  1000,
+              ),
         ]
       : [],
   );
   return waits.length ? Math.min(...waits) : null;
+}
+
+/** Browser frames may batch fast polling; VM event timestamps remain exact. */
+export function nextFirmwareSlice(
+  state: SimulationState,
+): { waitMs: number; elapsedMs: number } | null {
+  const delay = nextFirmwareDelay(state);
+  if (delay === null) return null;
+  if (delay === 0) return { waitMs: 1, elapsedMs: 0 };
+  const deadlines = Object.values(state.firmware).flatMap((instance) => {
+    const execution = instance.execution;
+    return execution &&
+      !instance.error &&
+      execution.wakeReason === 'delay' &&
+      execution.wakeAtUs !== null
+      ? [Math.max(0, execution.wakeAtUs - execution.timeUs) / 1000]
+      : [];
+  });
+  // Polling can be grouped into frames, but never across another board's
+  // explicit delay deadline, including waits shorter than one frame.
+  const elapsedMs = Math.min(Math.max(16, delay), ...deadlines);
+  return { waitMs: Math.max(1, elapsedMs), elapsedMs };
 }

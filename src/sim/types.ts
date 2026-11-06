@@ -49,7 +49,7 @@ export interface ElectricalSnapshot {
 export interface ElectricalEngine {
   evaluate(project: CircuitProject, inputs?: SimulationInputs): ElectricalSnapshot;
 }
-/** Future contract only; there is no firmware execution implementation. */
+/** Reserved binary-emulation contract; source execution uses firmware/uno.ts. */
 export interface FirmwareRuntime {
   readonly board: BoardKind;
   load(binary: Uint8Array): void;

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createComponent } from '../../model/components';
 import { createProject, serializeProject } from '../../model/project';
 import { pinKey } from '../../sim/topology';
 import type { CircuitProject } from '../../model/types';
 import { initialSimulation, transitionSimulation } from './runtime';
-import { nextFirmwareDelay } from './firmwareRuntime';
+import { nextFirmwareDelay, nextFirmwareSlice } from './firmwareRuntime';
+import type { SimulationState } from './runtime';
 
 const blink = (pin = '13', period = 1000) => `void setup(){pinMode(${pin}, OUTPUT);} void loop(){digitalWrite(${pin}, HIGH);delay(${period});digitalWrite(${pin}, LOW);delay(${period});}`;
 const delayedModeFailure = 'void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);pinMode(A5,OUTPUT);digitalWrite(A5,HIGH);}void loop(){delay(10);digitalWrite(12,HIGH);}';
@@ -20,7 +22,71 @@ function fixture(reversed = false): CircuitProject {
 }
 const run = (componentId: string, source: string) => ({ type: 'firmware-run' as const, componentId, source });
 const advance = (elapsedMs: number) => ({ type: 'firmware-advance' as const, elapsedMs });
+const millisBlink = readFileSync(new URL('../../../examples/arduino/blink-without-delay.ino', import.meta.url), 'utf8');
+function advanceTo(state: SimulationState, elapsedMs: number, doc: CircuitProject): SimulationState {
+  let next = transitionSimulation(state, advance(elapsedMs), doc);
+  for (let slices = 0; nextFirmwareDelay(next) === 0; slices++) {
+    if (slices > 10000) throw new Error('Pending advance did not complete');
+    next = transitionSimulation(next, advance(0), doc);
+  }
+  return next;
+}
 describe('source execution through the shared electrical circuit', () => {
+  it('never rounds a short explicit delay to the polling frame, including mixed boards', () => {
+    const doc = fixture();
+    let state = transitionSimulation(initialSimulation(), run('uno', blink('13', 10)), doc);
+    expect(nextFirmwareSlice(state)).toEqual({ waitMs: 10, elapsedMs: 10 });
+    state = transitionSimulation(state, run('esp', millisBlink.replace('LED_BUILTIN', 'D1')), doc);
+    expect(nextFirmwareSlice(state)).toEqual({ waitMs: 10, elapsedMs: 10 });
+    state = advanceTo(state, 10, doc);
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+    expect(nextFirmwareSlice(state)).toEqual({ waitMs: 10, elapsedMs: 10 });
+  });
+  it('runs millis Blink through the solver, preserving independent boards, pause and persisted project data', () => {
+    const doc = fixture(), saved = serializeProject(doc);
+    let state = transitionSimulation(initialSimulation(), run('uno', millisBlink), doc);
+    state = transitionSimulation(state, run('esp', blink('D1', 250)), doc);
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+    expect(nextFirmwareSlice(state)).toEqual({ waitMs: 16, elapsedMs: 16 });
+    state = advanceTo(state, 999, doc);
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+    state = advanceTo(state, 1, doc);
+    expect(state.snapshot?.components.led?.current).toBeCloseTo(3 / 370, 10);
+    expect(state.snapshot?.components.led?.brightness).toBeCloseTo((3 / 370) / 0.02, 10);
+    expect(state.inputs.gpio?.[pinKey('esp', 'D1')]?.level).toBe('HIGH');
+    state = transitionSimulation(state, { type: 'pause' }, doc);
+    expect(transitionSimulation(state, advance(9999), doc)).toBe(state);
+    expect(nextFirmwareSlice(state)).toBeNull();
+    state = transitionSimulation(state, { type: 'start' }, doc);
+    state = advanceTo(state, 1000, doc);
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+    const esp = state.firmware.esp;
+    state = transitionSimulation(state, { type: 'firmware-stop', componentId: 'uno' }, doc);
+    expect(state.firmware.esp).toBe(esp);
+    expect(state.inputs.gpio?.[pinKey('uno', 'D13')]).toBeUndefined();
+    expect(serializeProject(doc)).toBe(saved);
+    expect(transitionSimulation(state, { type: 'reset' }, doc)).toEqual(initialSimulation());
+  });
+  it.each(['reversed', 'unwired'] as const)('keeps a %s LED dark even when millis code drives HIGH', (kind) => {
+    const doc = fixture(kind === 'reversed');
+    if (kind === 'unwired') doc.wires = [];
+    const state = advanceTo(transitionSimulation(initialSimulation(), run('uno', millisBlink), doc), 1000, doc);
+    expect(state.inputs.gpio?.[pinKey('uno', 'D13')]?.level).toBe('HIGH');
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+  });
+  it('bounds combined board work and drains the same target without starving a neighboring board', () => {
+    const doc = fixture();
+    let state = transitionSimulation(initialSimulation(), run('uno', millisBlink), doc);
+    state = transitionSimulation(state, run('esp', blink('D1', 250)), doc);
+    state = transitionSimulation(state, advance(1000), doc);
+    expect(state.firmware.uno?.execution?.pendingUntilUs).toBe(1000000);
+    expect(state.firmware.esp?.execution?.timeMs).toBe(1000);
+    expect(nextFirmwareSlice(state)).toEqual({ waitMs: 1, elapsedMs: 0 });
+    state = advanceTo(state, 0, doc);
+    expect(state.firmware.uno?.execution?.timeMs).toBe(1000);
+    expect(state.firmware.esp?.execution?.timeMs).toBe(1000);
+    expect(state.snapshot?.components.led?.current).toBeCloseTo(3 / 370, 10);
+  });
   it('runs the user blink sketch: t0 HIGH, t1000 LOW, t2000 HIGH with independently calculated current', () => {
     const doc = fixture(), before = serializeProject(doc);
     let state = transitionSimulation(initialSimulation(), run('uno', blink()), doc);
@@ -45,7 +111,7 @@ describe('source execution through the shared electrical circuit', () => {
   });
   it.each([
     { error: 'pin-not-output', source: delayedModeFailure },
-    { error: 'step-limit', source: 'void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);pinMode(A5,OUTPUT);digitalWrite(A5,HIGH);delay(10);}void loop(){}' },
+    { error: 'arithmetic-error', source: 'int zero=0;void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);pinMode(A5,OUTPUT);digitalWrite(A5,HIGH);delay(10);}void loop(){zero=1/zero;}' },
   ])('releases active outputs and recalculates the circuit after a delayed $error', ({ error, source }) => {
     const doc = fixture(), documentBefore = serializeProject(doc);
     let state = transitionSimulation(initialSimulation(), run('uno', source), doc);

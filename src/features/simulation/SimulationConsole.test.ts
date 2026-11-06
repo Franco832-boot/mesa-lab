@@ -28,6 +28,17 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('firmware runtime errors in the existing simulation console', () => {
   it.each([
+    { locale: 'es', location: 'Línea 3, columna 3', message: 'Nombre sin declarar' },
+    { locale: 'en', location: 'Line 3, column 3', message: 'Undeclared' },
+  ])('renders a source-located semantic diagnostic in $locale', ({ locale, location, message }) => {
+    vi.stubGlobal('localStorage', { getItem: () => locale });
+    const state = transitionSimulation(initialSimulation(), { type: 'firmware-run', componentId: 'uno',
+      source: 'void setup(){}\nvoid loop(){\n  missing=1;\n}' }, project);
+    expect(render(state)).toContain(location);
+    expect(render(state)).toContain(message);
+    expect(state.firmware.uno?.error).toBe('name-error');
+  });
+  it.each([
     { locale: 'es', source: 'void setup(){Serial.begin(9600);}void loop(){}', message: 'Código no admitido o incorrecto' },
     { locale: 'en', source: 'void setup(){Serial.begin(9600);}void loop(){}', message: 'Unsupported or malformed source' },
     { locale: 'es', source: 'void setup(){pinMode(99,OUTPUT);}void loop(){delay(1000);}', message: 'Pin, modo, nivel lógico o espera no válidos' },

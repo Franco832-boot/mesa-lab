@@ -168,7 +168,7 @@ test('manual GPIO drives actual wires HIGH, LOW and high impedance and resets on
   await mode.selectOption('output');
   await level.selectOption('HIGH');
   await brightness(page, 'led', true);
-  assert.equal(await page.getByTestId('gpio-mode-D0').locator('option[value="input-pullup"]').isDisabled(), true);
+  assert.equal(await page.getByTestId('gpio-mode-D0').locator('option[value="input-pullup"]').getAttribute('disabled'), '');
   await level.selectOption('LOW');
   await brightness(page, 'led', false);
   await level.selectOption('FLOATING');

@@ -44,15 +44,14 @@ describe('bounded direct-GPIO Arduino source subset', () => {
     expect(events).toEqual(complete.gpio);
   });
   it('resolves UNO built-in and analog-capable digital pins from the profile', () => {
-    expect(compileArduinoSubset(blink('LED_BUILTIN')).setup[0]).toMatchObject({ pinId: 'D13' });
-    expect(compileArduinoSubset(blink('14')).setup[0]).toMatchObject({ pinId: 'A0' });
-    expect(compileArduinoSubset(blink('A5')).setup[0]).toMatchObject({ pinId: 'A5' });
+    expect(advanceArduino(createArduinoExecution(blink('LED_BUILTIN')), 0).gpio[0]?.pinId).toBe('D13');
+    expect(advanceArduino(createArduinoExecution(blink('14')), 0).gpio[0]?.pinId).toBe('A0');
+    expect(advanceArduino(createArduinoExecution(blink('A5')), 0).gpio[0]?.pinId).toBe('A5');
   });
   it('resolves NodeMCU symbols and numeric ESP GPIO independently of UNO', () => {
-    expect(compileArduinoSubset(blink('D1'), 'esp8266').setup[0]).toMatchObject({ pinId: 'D1' });
-    expect(compileArduinoSubset(blink('5'), 'esp8266').setup[0]).toMatchObject({ pinId: 'D1' });
-    expect(compileArduinoSubset(blink('13'), 'esp8266').setup[0]).toMatchObject({ pinId: 'D7' });
-    expect(compileArduinoSubset(blink('LED_BUILTIN'), 'esp8266').setup[0]).toMatchObject({ pinId: 'D4' });
+    for (const [pin, expected] of [['D1', 'D1'], ['5', 'D1'], ['13', 'D7'], ['LED_BUILTIN', 'D4']]) {
+      expect(advanceArduino(createArduinoExecution(blink(pin), 'esp8266'), 0).gpio[0]?.pinId).toBe(expected);
+    }
     const result = advanceArduino(createArduinoExecution(blink('D0', 100), 'esp8266'), 100);
     expect(result.execution.board).toBe('esp8266');
     expect(result.gpio.at(-1)).toMatchObject({ pinId: 'D0', atMs: 100, state: { level: 'LOW' } });
@@ -80,7 +79,7 @@ describe('bounded direct-GPIO Arduino source subset', () => {
   it.each([
     'void setup(){}', 'void setup(){}void loop(){ unknown(13); }',
     'void setup(){}void loop(){while(true){digitalWrite(13,HIGH);}}',
-    'int pin=13;void setup(){}void loop(){delay(1000);}',
+    'float pin=13;void setup(){}void loop(){delay(1000);}',
     '#include <ESP8266WiFi.h>\nvoid setup(){}void loop(){delay(1000);}',
     'void setup(){}void loop(){WiFi.begin();delay(1000);}',
     'void setup(){}void loop(){Serial.println("x");delay(1000);}',
@@ -97,12 +96,14 @@ describe('bounded direct-GPIO Arduino source subset', () => {
       'void setup(){pinMode(13,INPUT_PULLUP);}void loop(){delay(1000);}']) expect(() => compileArduinoSubset(source)).toThrow(UnoExecutionError);
     expect(() => compileArduinoSubset(blink('6'), 'esp8266')).toThrow(UnoExecutionError);
   });
-  it('bounds zero-delay loops, empty loops, source size, operations, and excessive time advances', () => {
+  it('yields empty/zero-delay loops and bounds source size, operations and advance work', () => {
     for (const source of ['void setup(){}void loop(){}', 'void setup(){}void loop(){delay(0);}'])
-      expect(errorCode(() => advanceArduino(createArduinoExecution(source), 0))).toBe('step-limit');
+      expect(advanceArduino(createArduinoExecution(source), 0).execution.wakeAt).toBe(1);
     expect(errorCode(() => compileArduinoSubset(' '.repeat(MAX_SOURCE_LENGTH + 1)))).toBe('source-limit');
     expect(errorCode(() => compileArduinoSubset(`void setup(){}void loop(){${'delay(1);'.repeat(MAX_PROGRAM_INSTRUCTIONS + 1)}}`))).toBe('instruction-limit');
-    expect(errorCode(() => advanceArduino(createArduinoExecution(blink('13', 1)), 100000))).toBe('step-limit');
+    const bounded = advanceArduino(createArduinoExecution(blink('13', 1)), 100000);
+    expect(bounded.yielded).toBe(true);
+    expect(bounded.execution.pendingUntilUs).toBe(100000000);
     expect(errorCode(() => advanceArduino(createArduinoExecution(blink()), -1))).toBe('invalid-value');
   });
   it('accepts comments, whitespace and Arduino header without treating comments as instructions', () => {

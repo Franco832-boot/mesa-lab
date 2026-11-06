@@ -34,8 +34,8 @@ describe('contextual settings surfaces', () => {
     expect(markup).toContain('aria-controls="workspace-tools"');
     expect(markup).not.toContain('data-testid="context-inspector"');
     expect(markup).not.toContain('class="inspector-panel panel"');
-    expect(markup.indexOf('data-testid="code-editor-pane"')).toBeGreaterThan(markup.indexOf('data-testid="workspace-stage"'));
-    expect(markup.indexOf('data-testid="code-editor-pane"')).toBeLessThan(markup.indexOf('data-testid="tool-sidebar"'));
+    expect(markup).not.toContain('data-testid="code-editor-pane"');
+    expect(markup.indexOf('data-testid="code-workspace"')).toBeGreaterThan(markup.indexOf('data-testid="tool-sidebar"'));
     expect(store.getState()).toBe(before);
   });
   it.each([

@@ -293,19 +293,22 @@ test('native touch rotation changes the mobile knob without moving the part or c
   const partBefore = await part(page, 'pot').getAttribute('transform');
   const viewportBefore = await page.locator('.workspace-svg > g').getAttribute('transform');
   const client = await page.context().newCDPSession(page);
+  let touching = false;
   try {
     const start = await knobPoint(page, -135);
     await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1 }] });
+    touching = true;
     for (let step = 1; step <= 24; step++) {
       const point = await knobPoint(page, -135 + 280 * step / 24);
       await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, id: 1 }] });
     }
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    touching = false;
     await ratio(page, 100);
     assert.equal(await part(page, 'pot').getAttribute('transform'), partBefore);
     assert.equal(await page.locator('.workspace-svg > g').getAttribute('transform'), viewportBefore);
   } finally {
-    await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+    if (touching) await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
     await client.detach();
   }
 });
