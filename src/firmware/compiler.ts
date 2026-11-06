@@ -282,6 +282,31 @@ class Compiler {
   }
   private statement(value: Statement): void {
     switch (value.kind) {
+      case 'for': {
+        this.scopes.push(new Map());
+        this.emit({ op: 'enter' }, value.at);
+        if (value.initializer?.kind === 'declare') this.declaration(value.initializer);
+        else if (value.initializer) {
+          this.expression(value.initializer);
+          this.emit({ op: 'drop' }, value.at);
+        }
+        const conditionPc = this.code.length;
+        let exit: number | null = null;
+        if (value.condition) {
+          this.expression(value.condition);
+          exit = this.emit({ op: 'branch', when: false, target: 0 }, value.at);
+        }
+        this.scoped([value.body], value.body.at);
+        if (value.update) {
+          this.expression(value.update);
+          this.emit({ op: 'drop' }, value.at);
+        }
+        this.emit({ op: 'jump', target: conditionPc }, value.at);
+        if (exit !== null) this.patch(exit, this.code.length);
+        this.emit({ op: 'leave' }, value.at);
+        this.scopes.pop();
+        return;
+      }
       case 'return': this.emit({ op: 'return' }, value.at); return;
       case 'empty':
         return;

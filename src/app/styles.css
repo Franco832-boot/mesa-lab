@@ -2625,6 +2625,24 @@ fieldset.terminal-picker {
 .iot-error { color: #a23939; }
 .iot-history { max-height: 260px; overflow: auto; }
 .tool-sidebar-content :is(input, select, textarea) { scroll-margin: 14px; }
+.workspace-area { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.workspace-main { container-type: inline-size; }
+.tool-sidebar--left { order: 0; border-left: 0; border-right: 1px solid var(--border); }
+.tool-sidebar--left > .sidebar-resizer { left: auto; right: -5px; }
+.project-library-title { display: flex; align-items: center; flex: 1; gap: 8px; margin: 8px; font-size: 13px; color: var(--accent-dark); }
+.project-library-content { padding: 14px; gap: 12px; }
+.project-library-intro { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.project-category { margin: 4px 0 9px; font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+.project-card { padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 7px; background: #fcfbfe; }
+.project-card h4 { margin: 0; font-size: 12px; line-height: 1.5; color: #615174; }
+.project-card p { font-size: 11px; line-height: 1.6; color: var(--muted); margin: 6px 0; }
+.project-card-components { display: block; font-size: 10px; line-height: 1.6; color: #81788d; margin-bottom: 10px; }
+.project-card > button { width: 100%; justify-content: center; font-size: 11px; }
+@container (max-width: 620px) {
+  .workspace-area { flex-direction: column; }
+  .workspace-area > .tool-sidebar--left { position: relative; inset: auto; width: 100% !important; flex-basis: auto !important; height: min(200px, 30vh); max-height: 32%; min-height: 0; border-radius: 0; }
+  .tool-sidebar--left > .sidebar-resizer { display: none; }
+}
 @media (max-width: 760px) {
   .iot-section { margin: 0 10px 10px; }
   .iot-actions button, .iot-form > button { min-height: 40px; }

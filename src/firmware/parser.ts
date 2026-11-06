@@ -80,6 +80,17 @@ class Parser {
       if (this.isDeclaration()) return this.declaration();
       if (this.match(';')) return { kind: 'empty', at };
       if (this.match('return')) { this.expect(';'); return { kind: 'return', at }; }
+      if (this.match('for')) {
+        this.expect('(');
+        let initializer: Declaration | Expression | null = null;
+        if (this.isDeclaration()) initializer = this.declaration();
+        else if (!this.match(';')) { initializer = this.expression(); this.expect(';'); }
+        const condition = this.peek().text === ';' ? null : this.expression();
+        this.expect(';');
+        const update = this.peek().text === ')' ? null : this.expression();
+        this.expect(')');
+        return { kind: 'for', initializer, condition, update, body: this.statement(), at };
+      }
       if (this.match('if')) {
         this.expect('('); const condition = this.expression(); this.expect(')');
         const then = this.statement();

@@ -34,6 +34,8 @@ export type Statement = CallStatement | Declaration
   | { kind: 'return'; at: SourceSpan }
   | { kind: 'block'; body: readonly Statement[]; at: SourceSpan }
   | { kind: 'if'; condition: Expression; then: Statement; otherwise: Statement | null; at: SourceSpan }
+  | { kind: 'for'; initializer: Declaration | Expression | null; condition: Expression | null;
+      update: Expression | null; body: Statement; at: SourceSpan }
   | { kind: 'expression'; value: Expression; at: SourceSpan }
   | { kind: 'empty'; at: SourceSpan };
 export interface SketchAst {

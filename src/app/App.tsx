@@ -18,6 +18,10 @@ import { ComponentLibrary } from '../features/components/ComponentLibrary';
 import { Inspector } from '../features/components/Inspector';
 import { ContextualInspector } from '../features/components/ContextualInspector';
 import { ToolSidebar } from '../features/tools/ToolSidebar';
+import { ProjectLibrary } from '../features/examples/ProjectLibrary';
+import { createExampleProject, projectExamples } from '../model/exampleProjects';
+import type { ExampleId } from '../model/exampleProjects';
+import { preserveBeforeExample } from '../features/examples/replacement';
 import { useWorkspaceTools } from '../features/tools/useWorkspaceTools';
 import { useBoardContext } from '../features/tools/useBoardContext';
 import { CodeWorkspace } from '../features/tools/CodeWorkspace';
@@ -49,6 +53,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const tools = useWorkspaceTools();
   const libraryOpen = tools.open;
   const setLibraryOpen = tools.setOpen;
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [pendingExample, setPendingExample] = useState<ExampleId | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const toolTab = tools.tab;
   const setToolTab = tools.setTab;
@@ -178,6 +184,12 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     setLibraryOpen((previous) => !previous);
     if (window.matchMedia('(max-width: 760px)').matches) setInspectorOpen(false);
   };
+  const closeProjects = () => {
+    setProjectsOpen(false);
+    requestAnimationFrame(() => libraryToggleRef.current?.focus({ preventScroll: true }));
+  };
+  const focusToolsToggle = () => requestAnimationFrame(() =>
+    document.querySelector<HTMLButtonElement>('[data-testid="sidebar-toggle"]')?.focus({ preventScroll: true }));
   const toggleInspector = () => {
     if (!selectedComponent && !selectedWire) return;
     setInspectorOpen((previous) => !previous);
@@ -284,6 +296,32 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     } catch {
       setNotice('importError');
     }
+  };
+  const installExample = (id: ExampleId) => {
+    try {
+      const definition = projectExamples.find((example) => example.id === id);
+      if (!definition) throw new Error('unknown-example');
+      const source = serializeProject(createExampleProject(id, t(definition.name)));
+      preserveBeforeExample(localStorage, project);
+      simulation.reset();
+      setFitOnMount(true);
+      editor.clearSelection();
+      setInspectorOpen(false);
+      setConnectionRequest(null);
+      setWiperPreview(null);
+      setHighlightedIds([]);
+      setTool('select');
+      setConsoleOpen(id === 'dht11');
+      load(source);
+      setPendingExample(null);
+      setNotice('exampleLoaded');
+    } catch {
+      setNotice('exampleLoadError');
+    }
+  };
+  const openExample = (id: ExampleId) => {
+    if (!saved) setPendingExample(id);
+    else installExample(id);
   };
   const renderInspector = (components: ElectronicComponent[], wires: Wire[]) =>
     inspectorVisible ? (
@@ -538,17 +576,17 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           <div className="editor-toolbar">
             <div className="tool-group">
               <button
-                className={`icon-button ${libraryOpen ? 'active-subtle' : ''}`}
+                className={`icon-button ${projectsOpen ? 'active-subtle' : ''}`}
                 ref={libraryToggleRef}
                 data-testid="library-toggle"
-                aria-expanded={libraryOpen}
-                aria-controls="workspace-tools"
-                onClick={toggleLibrary}
-                title={t('toggleTools')}
-                aria-label={t('toggleTools')}
-                aria-pressed={libraryOpen}
+                aria-expanded={projectsOpen}
+                aria-controls="example-projects"
+                onClick={() => setProjectsOpen((previous) => !previous)}
+                title={t('toggleProjects')}
+                aria-label={t('toggleProjects')}
+                aria-pressed={projectsOpen}
               >
-                <Icon name="library" />
+                <Icon name="folder" />
               </button>
               <span className="control-divider" />
               {(['select', 'pan', 'connect'] as const).map((item) => (
@@ -645,6 +683,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
               </button>
             </div>
           </div>
+          <div className="workspace-area">
+          <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={openExample} />
           <Workspace
             key={`${project.id}-${revision}`}
             inspector={renderInspector}
@@ -678,6 +718,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             wireColor={wireColor}
             connectionRequest={connectionRequest}
           />
+          </div>
           <SimulationConsole
             open={consoleOpen}
             onToggle={() => setConsoleOpen((previous) => !previous)}
@@ -692,6 +733,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         </main>
         <ToolSidebar
           canvasRef={stageRef}
+          canvasVersion={`${project.id}-${revision}`}
           onDockChange={setToolDockOffset}
           open={libraryOpen}
           onToggle={toggleLibrary}
@@ -705,7 +747,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           onWidth={tools.setWidth}
           onClose={() => {
             setLibraryOpen(false);
-            requestAnimationFrame(() => libraryToggleRef.current?.focus({ preventScroll: true }));
+            focusToolsToggle();
           }}
           panels={{
             components: (
@@ -720,9 +762,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 onAdd={addFromLibrary}
                 onClose={() => {
                   setLibraryOpen(false);
-                  requestAnimationFrame(() =>
-                    libraryToggleRef.current?.focus({ preventScroll: true }),
-                  );
+                  focusToolsToggle();
                 }}
               />
             ),
@@ -736,7 +776,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 saveStatus={saveStatus}
                 onClose={() => {
                   setToolTab('components');
-                  requestAnimationFrame(() => libraryToggleRef.current?.focus());
+                  focusToolsToggle();
                 }}
                 onSelectBoard={boardContext.selectBoard}
                 onFileAction={(action) =>
@@ -806,6 +846,13 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         )}
       </div>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {pendingExample && <Dialog title={t('replaceExampleTitle')} onClose={() => setPendingExample(null)} className="reset-dialog">
+        <p className="dialog-intro">{t('replaceExampleDetail')}</p>
+        <div className="dialog-actions">
+          <button className="secondary-button" onClick={() => setPendingExample(null)}>{t('cancel')}</button>
+          <button className="primary-button" data-testid="confirm-example" onClick={() => installExample(pendingExample)}>{t('openExample')}</button>
+        </div>
+      </Dialog>}
       {resetOpen && (
         <Dialog
           title={t('resetTitle')}

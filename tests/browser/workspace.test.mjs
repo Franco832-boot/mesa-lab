@@ -13,7 +13,7 @@ async function selectedCodeBoard(page, id) {
   assert.equal(await codeBoard(page, id).getAttribute('aria-selected'), 'true');
 }
 async function tools(page, tab) {
-  if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('library-toggle').click();
+  if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('sidebar-toggle').click();
   await page.getByTestId(`tool-tab-${tab}`).click();
   assert.equal(await page.getByTestId(`tool-tab-${tab}`).getAttribute('aria-selected'), 'true');
 }
@@ -372,7 +372,7 @@ for (const width of [1440, 390]) {
     const page = await openFixture(harness.browser, t, document, { width });
     const showCode = async () => {
       await tools(page, 'code');
-      if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('library-toggle').click();
+      if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('sidebar-toggle').click();
     };
     await showCode();
     const code = panel(page, 'code');
@@ -558,7 +558,7 @@ for (const width of [1440, 390]) {
       }
       await page.getByTestId('sidebar-toggle').click();
       await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'sidebar-toggle');
-      assert.equal(await page.getByTestId('library-toggle').getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.getByTestId('sidebar-toggle').getAttribute('aria-expanded'), 'false');
       await assertSameNode(stage, '[data-testid="workspace-stage"]');
     });
   }

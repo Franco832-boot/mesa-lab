@@ -111,6 +111,7 @@ Redux holds the authoritative document. React holds selection, drags, filters an
 
 ## Documentation
 
+- [Educational project library, circuits and validation](docs/EXAMPLE_PROJECTS.md)
 - [Engineering standards](AGENTS.md)
 - [Engineering responsibilities](docs/AGENT_ROLES.md)
 - [Design system](docs/DESIGN_SYSTEM.md)
