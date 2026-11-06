@@ -8,6 +8,8 @@ import type { SimulationState } from '../features/simulation/runtime';
 import { nextFirmwareDelay } from '../features/simulation/firmwareRuntime';
 import type { CircuitProject } from './types';
 import { applyEditorCommand } from './editor';
+import { canInsert } from './breadboard';
+import { componentDefinitions } from './components';
 import { phase1Source } from '../test/phase1';
 
 function start(project: CircuitProject, source = project.programs[0]?.source ?? '') {
@@ -28,7 +30,7 @@ describe('ordinary v1 educational project templates', () => {
     expect(new Set(project.components.map((part) => part.kind))).toEqual(new Set(example.components));
     expect(new Set(project.components.map((part) => part.id)).size).toBe(project.components.length);
     expect(project.components.find((part) => part.kind === 'breadboard')).toBeDefined();
-    expect(project.components.filter((part) => part.attachments?.length).length).toBe(example.id === 'dht11' ? 1 : 2);
+    for (const part of project.components.filter((part) => canInsert(part.kind))) expect(part.attachments).toHaveLength(componentDefinitions[part.kind].pins.length);
     expect(parseProject(serializeProject(project))).toEqual(project);
     expect(() => compileArduinoSubset(project.programs[0]?.source ?? '')).not.toThrow();
     expect(start(project).firmware.uno?.error).toBeNull();
@@ -40,7 +42,7 @@ describe('ordinary v1 educational project templates', () => {
     first.wires.splice(0); first.components[0] && (first.components[0].position.x = 999);
     expect(second.wires).toHaveLength(3);
     expect(second.components[0]?.position.x).toBe(80);
-    expect(availableExampleCategories).toEqual(['sensors', 'basics']);
+    expect(availableExampleCategories).toEqual(['sensors', 'basics', 'displays']);
     expect(parseProject(serializeProject(parseProject(phase1Source)))).toEqual(parseProject(phase1Source));
   });
   it('reuses the existing millis sketch and drives the actual LED at exact virtual second boundaries', () => {

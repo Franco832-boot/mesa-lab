@@ -1,3 +1,4 @@
+import type { LcdController, LcdView } from '../model/lcd';
 import type { BoardKind, CircuitProject, GpioState, LogicLevel } from '../model/types';
 import type { DhtEnvironment } from '../model/dht11';
 
@@ -25,6 +26,8 @@ export interface SimulationIssue {
   pinIds: string[];
 }
 export interface SimulationInputs {
+  pcf8574?: Readonly<Record<string, number>>;
+  lcd?: Readonly<Record<string, LcdController>>;
   dht11?: Readonly<Record<string, DhtEnvironment>>;
   gpio?: Readonly<Record<string, GpioState>>;
   /** Physical pressed state, independent of normallyClosed project configuration. */
@@ -36,6 +39,7 @@ export interface PinResult {
   logic: LogicLevel | 'UNDEFINED';
 }
 export interface ComponentResult {
+  lcd?: LcdView;
   condition: ComponentCondition;
   current?: number;
   voltage?: number;

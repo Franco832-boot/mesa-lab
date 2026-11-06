@@ -1,3 +1,4 @@
+import { validPcfAddress } from './lcd';
 import type {
   BoardProgram,
   CircuitProject,
@@ -103,6 +104,8 @@ function validProperties(kind: unknown, value: unknown): boolean {
       );
     case 'power-supply':
       return finite(value.voltage) && value.voltage >= 0 && value.voltage <= 60;
+    case 'pcf8574': return finite(value.address) && validPcfAddress(value.address) && finite(value.contrast) && value.contrast >= 0 && value.contrast <= 1;
+    case 'lcd-20x4': case 'lcd-16x2': return value.controller === 'HD44780';
     case 'dht11': return finite(value.temperature) && finite(value.humidity) && validDhtEnvironment({ temperature: value.temperature, humidity: value.humidity });
     default:
       return false;
@@ -144,6 +147,8 @@ function normalizeComponent(item: ElectronicComponent): ElectronicComponent {
       : {}),
   };
   switch (item.kind) {
+    case 'pcf8574': return { ...base, kind: item.kind, properties: { address: item.properties.address, contrast: item.properties.contrast } };
+    case 'lcd-20x4': case 'lcd-16x2': return { ...base, kind: item.kind, properties: { controller: 'HD44780' } };
     case 'dht11': return { ...base, kind: item.kind, properties: { temperature: item.properties.temperature, humidity: item.properties.humidity } };
     case 'arduino-uno':
       return { ...base, kind: item.kind, properties: { logicVoltage: 5 } };

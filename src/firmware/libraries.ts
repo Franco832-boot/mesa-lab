@@ -1,8 +1,19 @@
 /** Explicit API contracts; these adapters do not load or execute native C++ libraries. */
 export interface MethodSignature { minArgs: number; maxArgs: number; result: 'float' | 'void' }
-export const libraryNames = ['DHT', 'Serial'] as const;
+export const libraryNames = ['DHT', 'Serial', 'LiquidCrystal', 'LiquidCrystal_I2C', 'Wire'] as const;
 export type LibraryClass = typeof libraryNames[number];
+const lcdMethods: Readonly<Record<string, MethodSignature>> = {
+    begin: { minArgs: 2, maxArgs: 2, result: 'void' }, clear: { minArgs: 0, maxArgs: 0, result: 'void' },
+    home: { minArgs: 0, maxArgs: 0, result: 'void' }, setCursor: { minArgs: 2, maxArgs: 2, result: 'void' },
+    print: { minArgs: 1, maxArgs: 2, result: 'void' }, write: { minArgs: 1, maxArgs: 1, result: 'void' },
+    cursor: { minArgs: 0, maxArgs: 0, result: 'void' }, noCursor: { minArgs: 0, maxArgs: 0, result: 'void' },
+    blink: { minArgs: 0, maxArgs: 0, result: 'void' }, noBlink: { minArgs: 0, maxArgs: 0, result: 'void' },
+    display: { minArgs: 0, maxArgs: 0, result: 'void' }, noDisplay: { minArgs: 0, maxArgs: 0, result: 'void' },
+  };
 export const LIBRARIES: Record<LibraryClass, { header: string | null; constructorArity: number | null; methods: Readonly<Record<string, MethodSignature>> }> = {
+  LiquidCrystal: { header: 'LiquidCrystal.h', constructorArity: 6, methods: lcdMethods },
+  LiquidCrystal_I2C: { header: 'LiquidCrystal_I2C.h', constructorArity: 3, methods: { ...lcdMethods, init: { minArgs: 0, maxArgs: 0, result: 'void' }, backlight: { minArgs: 0, maxArgs: 0, result: 'void' }, noBacklight: { minArgs: 0, maxArgs: 0, result: 'void' } } },
+  Wire: { header: 'Wire.h', constructorArity: null, methods: { begin: { minArgs: 0, maxArgs: 0, result: 'void' } } },
   DHT: { header: 'DHT.h', constructorArity: 2, methods: { begin: { minArgs: 0, maxArgs: 0, result: 'void' },
     readTemperature: { minArgs: 0, maxArgs: 0, result: 'float' }, readHumidity: { minArgs: 0, maxArgs: 0, result: 'float' } } },
   Serial: { header: null, constructorArity: null, methods: { begin: { minArgs: 1, maxArgs: 1, result: 'void' },

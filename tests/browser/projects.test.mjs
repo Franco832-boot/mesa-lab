@@ -40,8 +40,8 @@ for (const locale of ['es', 'en']) for (const width of [1440, 390]) {
     const before = await stage.boundingBox(); assert.ok(before);
     await toggle.click();
     assert.equal(await left.isVisible(), true); assert.equal(await right.isVisible(), true);
-    assert.equal(await left.locator('.project-card').count(), 3);
-    assert.equal(await left.locator('.project-category').count(), 2);
+    assert.equal(await left.locator('.project-card').count(), 7);
+    assert.equal(await left.locator('.project-category').count(), 3);
     const projectsBox = await left.boundingBox(), stageBox = await stage.boundingBox(), rightBox = await right.boundingBox();
     assert.ok(projectsBox && stageBox && rightBox);
     if (width > 760) {

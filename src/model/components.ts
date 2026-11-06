@@ -1,3 +1,4 @@
+import { LCD_TERMINALS } from './lcd';
 import type {
   ComponentKind,
   ElectronicComponent,
@@ -210,10 +211,15 @@ const breadboardGroups: ContactGroup[] = [
   ),
   ...rails.map((rail) => ({ id: rail.id, pinIds: range(50).map((i) => `${rail.id}${i + 1}`) })),
 ];
+const lcdHeaderPins = LCD_TERMINALS.map((id, index) => pin(id, 7.5 + index * 2.54, 3, id === 'VDD' || id === 'A' ? 'power' : id === 'VSS' || id === 'K' ? 'ground' : 'digital', `${index + 1} · ${id}`));
 const sourceDefinitions: Record<
   ComponentKind,
   { pins: PinDefinition[]; contactGroups: ContactGroup[] }
 > = {
+  pcf8574: { pins: [...['GND','VCC','SDA','SCL'].map((id, index) => pin(id, -5, 7 + index * 2.54, id === 'GND' ? 'ground' : id === 'VCC' ? 'power' : 'digital')),
+    ...LCD_TERMINALS.map((id, index) => pin(`LCD_${id}`, 1.95 + index * 2.54, 2, 'digital', `LCD · ${id}`))], contactGroups: [{ id: 'vcc', pinIds: ['VCC', 'LCD_VDD'] }, { id: 'ground', pinIds: ['GND', 'LCD_VSS', 'LCD_K'] }] },
+  'lcd-20x4': { pins: lcdHeaderPins, contactGroups: [] },
+  'lcd-16x2': { pins: lcdHeaderPins, contactGroups: [] },
   dht11: { pins: [pin('DATA', 5.46, 27, 'digital', 'S · OUT / DATA'),
     pin('VCC', 8, 27, 'power', '+ · VCC'), pin('GND', 10.54, 27, 'ground', '− · GND')], contactGroups: [] },
   'arduino-uno': {
@@ -307,6 +313,9 @@ function defineComponent(kind: ComponentKind): ComponentDefinition {
   };
 }
 export const componentDefinitions: Record<ComponentKind, ComponentDefinition> = {
+  pcf8574: defineComponent('pcf8574'),
+  'lcd-20x4': defineComponent('lcd-20x4'),
+  'lcd-16x2': defineComponent('lcd-16x2'),
   dht11: defineComponent('dht11'),
   'arduino-uno': defineComponent('arduino-uno'),
   esp8266: defineComponent('esp8266'),
@@ -372,6 +381,8 @@ export function createComponent(
 ): ElectronicComponent {
   const base = { id, position, rotation: 0 };
   switch (kind) {
+    case 'pcf8574': return { ...base, kind, properties: { address: 0x27, contrast: 0.9 } };
+    case 'lcd-20x4': case 'lcd-16x2': return { ...base, kind, properties: { controller: 'HD44780' } };
     case 'dht11': return { ...base, kind, properties: { temperature: 25, humidity: 50 } };
     case 'arduino-uno':
       return { ...base, kind, properties: { logicVoltage: 5 } };

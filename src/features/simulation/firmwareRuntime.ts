@@ -1,3 +1,6 @@
+import { resolveI2cLcd, writeI2cLcd } from '../../sim/lcdI2c';
+import type { I2cLcdTarget } from '../../sim/lcdI2c';
+import { resolveParallelLcd, writeParallelLcd } from '../../sim/lcdTransport';
 import type { CircuitProject, GpioState } from '../../model/types';
 import { componentDefinitions } from '../../model/components';
 import {
@@ -16,15 +19,35 @@ import type { FirmwareHost } from '../../firmware/ports';
 import { observeDht11 } from '../../sim/dht11';
 import type { DhtObservation } from '../../model/dht11';
 
-function circuitHost(project: CircuitProject, inputs: SimulationInputs, boardId: string): FirmwareHost {
+interface CircuitHost extends FirmwareHost { currentInputs(): SimulationInputs }
+function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, boardId: string): CircuitHost {
+  let inputs = initialInputs;
   let signature: string | null = null, observation: DhtObservation | null = null;
-  return { observeDht: (pinId, _timeUs, pendingGpio) => {
-    const next = `${pinId}:${pendingGpio.length}`;
-    if (next === signature) return observation;
+  const targets = new Map<string, string | null>();
+  const i2cTargets = new Map<string, I2cLcdTarget | null>();
+  const applyPending = (pendingGpio: readonly { pinId: string; state: GpioState }[]) => {
     const gpio = { ...inputs.gpio };
     for (const event of pendingGpio) gpio[pinKey(boardId, event.pinId)] = event.state;
-    observation = observeDht11(project, { ...inputs, gpio }, boardId, pinId);
+    return { ...inputs, gpio };
+  };
+  return { currentInputs: () => inputs, observeDht: (pinId, _timeUs, pendingGpio) => {
+    const next = `${pinId}:${pendingGpio.length}`;
+    if (next === signature) return observation;
+    observation = observeDht11(project, applyPending(pendingGpio), boardId, pinId);
     signature = next; return observation;
+  }, writeLcd: (bus, operation, pendingGpio) => {
+    const current = applyPending(pendingGpio);
+    const key = JSON.stringify([bus, current.gpio, Object.entries(current.pcf8574 ?? {}).map(([id, latch]) => [id, latch & 8])]);
+    if (bus.kind === 'parallel') {
+      if (!targets.has(key)) targets.set(key, resolveParallelLcd(project, current, boardId, bus));
+      const target = targets.get(key);
+      if (target) inputs = writeParallelLcd(inputs, target, bus, operation);
+    } else {
+      if (!i2cTargets.has(key)) i2cTargets.set(key, resolveI2cLcd(project, current, boardId, bus));
+      const target = i2cTargets.get(key);
+      if (target) inputs = writeI2cLcd(inputs, target, bus, operation);
+    }
+    signature = null;
   } };
 }
 
@@ -82,10 +105,11 @@ export function transitionFirmware(
     if (!board || (board.kind !== 'arduino-uno' && board.kind !== 'esp8266')) return previous;
     const inputs = clearBoardInputs(previous.inputs, project, board.id);
     try {
-      const initial = advanceArduino(createArduinoExecution(event.source, board.kind), 0, MAX_ADVANCE_STEPS, circuitHost(project, inputs, board.id));
-      const gpio = { ...inputs.gpio };
+      const host = circuitHost(project, inputs, board.id);
+      const initial = advanceArduino(createArduinoExecution(event.source, board.kind), 0, MAX_ADVANCE_STEPS, host);
+      const gpio = { ...host.currentInputs().gpio };
       for (const output of initial.gpio) gpio[pinKey(board.id, output.pinId)] = output.state;
-      const nextInputs = { ...inputs, gpio };
+      const nextInputs = { ...host.currentInputs(), gpio };
       return {
         ...previous,
         status: 'running',
@@ -122,7 +146,9 @@ export function transitionFirmware(
   for (const [id, instance] of Object.entries(previous.firmware)) {
     if (!instance.execution || instance.error) continue;
     try {
-      const advanced = advanceArduino(instance.execution, event.elapsedMs, budget, circuitHost(project, inputs, id));
+      const host = circuitHost(project, inputs, id);
+      const advanced = advanceArduino(instance.execution, event.elapsedMs, budget, host);
+      inputs = host.currentInputs();
       firmware[id] = { ...instance, execution: advanced.execution };
       for (const output of advanced.gpio)
         events.push({

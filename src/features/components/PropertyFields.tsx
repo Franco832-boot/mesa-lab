@@ -6,6 +6,7 @@ import { useLocale } from '../../locales/useLocale';
 import { ledColors } from '../../model/components';
 import { ledOptions } from './catalog';
 import { DHT11_LIMITS } from '../../model/dht11';
+import { lcdGeometry } from '../../model/lcd';
 
 export function NumberProperty({
   label,
@@ -73,6 +74,21 @@ export function PropertyFields({
 }) {
   const { t } = useLocale();
   switch (component.kind) {
+    case 'lcd-16x2': case 'lcd-20x4': return <>
+      <p>{t('lcdType')}: HD44780</p>
+      <p>{t('lcdCharacters')}: {lcdGeometry(component.kind).columns} × {lcdGeometry(component.kind).rows}</p>
+      <p className="inspector-hint">{t('lcdWiringNote')}</p>
+    </>;
+    case 'pcf8574': return <>
+      <label className="property-field"><span>{t('pcfAddress')}</span>
+        <select value={component.properties.address} onChange={(event) => onUpdate({ kind: 'pcf8574', properties: { ...component.properties, address: Number(event.target.value) } })}>
+          {[...Array.from({ length: 8 }, (_, index) => 0x20 + index), ...Array.from({ length: 8 }, (_, index) => 0x38 + index)].map((address) =>
+            <option key={address} value={address}>0x{address.toString(16).toUpperCase()}</option>)}
+        </select>
+      </label>
+      <NumberProperty label="pcfContrast" value={component.properties.contrast} min={0} max={1}
+        onCommit={(contrast) => onUpdate({ kind: 'pcf8574', properties: { ...component.properties, contrast } })} />
+    </>;
     case 'dht11': return <>
       <NumberProperty label="dhtTemperature" value={component.properties.temperature} min={DHT11_LIMITS.temperatureMin} max={DHT11_LIMITS.temperatureMax}
         onCommit={(temperature) => onUpdate({ kind: 'dht11', properties: { ...component.properties, temperature } })} />

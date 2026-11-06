@@ -2,13 +2,15 @@ import dhtSource from '../../examples/arduino/dht11-project.ino?raw';
 import millisSource from '../../examples/arduino/blink-without-delay.ino?raw';
 import forSource from '../../examples/arduino/led-for.ino?raw';
 import type { TranslationKey } from '../locales/es/messages';
-import { componentDefinitions, createComponent, newId, pinWorldPosition } from './components';
-import { planInsertion } from './breadboard';
+import { createComponent, newId } from './components';
+import { mountExampleComponent as mount } from './examplePlacement';
+import { createLcdExample } from './lcdExamples';
+import type { LcdExampleId } from './lcdExamples';
 import { createProject, parseProject } from './project';
 import type { CircuitProject, ComponentKind, ElectronicComponent, Wire } from './types';
 
 export type ExampleCategory = 'basics' | 'sensors' | 'displays' | 'communication';
-export type ExampleId = 'dht11' | 'led-millis' | 'led-for';
+export type ExampleId = 'dht11' | 'led-millis' | 'led-for' | LcdExampleId;
 export interface ProjectExample {
   readonly id: ExampleId;
   readonly name: TranslationKey;
@@ -24,25 +26,22 @@ export const projectExamples = [
   { id: 'dht11', name: 'exampleDhtName', description: 'exampleDhtDescription', category: 'sensors', components: ['arduino-uno', 'breadboard', 'dht11'] },
   { id: 'led-millis', name: 'exampleMillisName', description: 'exampleMillisDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'led', 'resistor'] },
   { id: 'led-for', name: 'exampleForName', description: 'exampleForDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'led', 'resistor'] },
+  { id: 'lcd16-parallel', name: 'exampleLcd16Parallel', description: 'exampleLcdParallelDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-16x2','potentiometer','resistor'] },
+  { id: 'lcd20-parallel', name: 'exampleLcd20Parallel', description: 'exampleLcdParallelDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-20x4','potentiometer','resistor'] },
+  { id: 'lcd16-i2c', name: 'exampleLcd16I2c', description: 'exampleLcdI2cDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-16x2','pcf8574'] },
+  { id: 'lcd20-i2c', name: 'exampleLcd20I2c', description: 'exampleLcdI2cDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-20x4','pcf8574'] },
 ] as const satisfies readonly ProjectExample[];
 export const availableExampleCategories: readonly ExampleCategory[] = [...new Set(projectExamples.map((item) => item.category))];
 
-const sketches: Readonly<Record<ExampleId, string>> = { dht11: dhtSource, 'led-millis': millisSource, 'led-for': forSource };
-function mount(components: readonly ElectronicComponent[], kind: 'dht11' | 'led' | 'resistor', id: string, holeId: string): ElectronicComponent {
-  const part = createComponent(kind, { x: 0, y: 0 }, id);
-  const lead = componentDefinitions[kind].pins[0];
-  const target = pinWorldPosition(components, { componentId: 'breadboard', pinId: holeId });
-  if (!lead || !target) throw new Error('invalid-example-contact');
-  const plan = planInsertion(components, { ...part, position: { x: target.x - lead.position.x, y: target.y - lead.position.y } });
-  if (!plan.valid || !plan.component.attachments?.length) throw new Error('invalid-example-footprint');
-  return plan.component;
-}
+const sketches: Readonly<Record<'dht11' | 'led-millis' | 'led-for', string>> = { dht11: dhtSource, 'led-millis': millisSource, 'led-for': forSource };
+
 function wire(id: string, pinId: string, holeId: string, color: string): Wire {
   return { id, from: { componentId: 'uno', pinId }, to: { componentId: 'breadboard', pinId: holeId }, color, waypoints: [] };
 }
 /** Each call creates a fresh, validated ordinary v1 project. Footprints and
  * dimensions come exclusively from the shared physical registry. */
 export function createExampleProject(id: ExampleId, name: string, projectId = newId()): CircuitProject {
+  if (id === 'lcd16-parallel' || id === 'lcd20-parallel' || id === 'lcd16-i2c' || id === 'lcd20-i2c') return createLcdExample(id, name, projectId);
   const components: ElectronicComponent[] = [
     createComponent('arduino-uno', { x: 80, y: 60 }, 'uno'),
     createComponent('breadboard', { x: 50, y: 350 }, 'breadboard'),

@@ -20,6 +20,9 @@ import type { LibraryClass } from './libraries';
 import type { ObjectDeclaration } from './ast';
 
 type Operation =
+  | { op: 'wire-begin' }
+  | { op: 'lcd-text'; receiver: string; text: string }
+  | { op: 'lcd-call'; receiver: string; name: string; arity: number }
   | { op: 'construct'; name: string; className: LibraryClass; arity: number }
   | { op: 'method'; receiver: string; name: string }
   | { op: 'isnan' }
@@ -73,7 +76,7 @@ const reserved = new Set([
   'bool',
   'unsigned',
   'const',
-  'float', 'isnan', 'DHT', 'Serial',
+  'float', 'isnan', ...Object.keys(LIBRARIES),
   ...Object.keys(GPIO_BUILTINS),
   ...Object.keys(CLOCK_BUILTINS),
 ]);
@@ -101,7 +104,8 @@ function references(value: Expression, name: string): boolean {
 class Compiler {
   private code: Instruction[] = [];
   private scopes: Map<string, Binding>[] = [new Map()];
-  private objects = new Map<string, LibraryClass>([['Serial', 'Serial']]);
+  private objects = new Map<string, LibraryClass>([['Serial', 'Serial'], ['Wire', 'Wire']]);
+  private headers: readonly string[] = [];
   constructor(private readonly board: BoardKind) {}
   private emit(operation: Operation, at: SourceSpan): number {
     if (this.code.length >= MAX_AST_NODES * 8) fail('instruction-limit', at);
@@ -155,7 +159,10 @@ class Compiler {
         const signature = methodSignature(type, value.name);
         if (!signature) return fail('unsupported-syntax', at);
         if (value.args.length < signature.minArgs || value.args.length > signature.maxArgs || (!allowVoid && signature.result === 'void')) return fail('type-error', at);
-        if (type === 'Serial') {
+        if (type === 'Wire') {
+          if (!this.headers.includes('Wire.h') && !this.headers.includes('LiquidCrystal_I2C.h')) return fail('unsupported-syntax', at);
+          this.emit({ op: 'wire-begin' }, at); this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else if (type === 'Serial') {
           const argument = value.args[0];
           if (value.name === 'begin') {
             if (!argument) return fail('type-error', at);
@@ -166,6 +173,17 @@ class Compiler {
           } else {
             for (const arg of value.args) this.expression(arg);
             this.emit({ op: 'serial-number', digits: value.args.length === 2, newline: value.name === 'println' }, at);
+          }
+          this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else if (type === 'LiquidCrystal' || type === 'LiquidCrystal_I2C') {
+          const argument = value.args[0];
+          if (value.name === 'print' && argument?.kind === 'string') {
+            if (value.args.length !== 1) return fail('type-error', at);
+            for (let offset = 0; offset < argument.value.length; offset += 32)
+              this.emit({ op: 'lcd-text', receiver: value.receiver, text: argument.value.slice(offset, offset + 32) }, at);
+          } else {
+            for (const arg of value.args) this.expression(arg);
+            this.emit({ op: 'lcd-call', receiver: value.receiver, name: value.name, arity: value.args.length }, at);
           }
           this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
         } else this.emit({ op: 'method', receiver: value.receiver, name: value.name }, at);
@@ -341,6 +359,7 @@ class Compiler {
     }
   }
   compile(ast: SketchAst): UnoProgram {
+    this.headers = ast.headers;
     const at = { offset: 0, line: 1, column: 1 };
     for (const declaration of ast.globals) {
       if (declaration.kind === 'construct') this.construct(declaration, ast.headers);

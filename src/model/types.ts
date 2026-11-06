@@ -14,6 +14,9 @@ export type ComponentKind =
   | 'resistor'
   | 'pushbutton'
   | 'potentiometer'
+  | 'pcf8574'
+  | 'lcd-16x2'
+  | 'lcd-20x4'
   | 'dht11'
   | 'power-supply';
 export type ElectricalPinType =
@@ -75,6 +78,8 @@ export type ElectronicComponent = ComponentBase &
     | { kind: 'resistor'; properties: { resistance: number } }
     | { kind: 'pushbutton'; properties: { normallyClosed: boolean } }
     | { kind: 'potentiometer'; properties: { resistance: number; ratio: number } }
+    | { kind: 'pcf8574'; properties: { address: number; contrast: number } }
+    | { kind: 'lcd-16x2' | 'lcd-20x4'; properties: { controller: 'HD44780' } }
     | { kind: 'dht11'; properties: { temperature: number; humidity: number } }
     | { kind: 'power-supply'; properties: { voltage: number } }
   );

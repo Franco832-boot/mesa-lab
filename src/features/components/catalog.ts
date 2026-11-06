@@ -16,6 +16,9 @@ export interface CatalogEntry {
   category: 'boards' | 'basic';
 }
 export const catalog: CatalogEntry[] = [
+  { kind: 'pcf8574', name: 'pcfName', description: 'pcfDescription', category: 'basic' },
+  { kind: 'lcd-20x4', name: 'lcd20Name', description: 'lcdDescription', category: 'basic' },
+  { kind: 'lcd-16x2', name: 'lcd16Name', description: 'lcdDescription', category: 'basic' },
   { kind: 'dht11', name: 'dht11_name', description: 'dht11_description', category: 'basic' },
   {
     kind: 'arduino-uno',

@@ -36,7 +36,27 @@ export function buildModels(
       branches.push({ id: `${component.id}:${kind}`, componentId: component.id, kind, a: node(a), b: node(b), value });
     };
     switch (component.kind) {
+      case 'pcf8574': {
+        add('resistor', 'VCC', 'GND', 50000);
+        for (const terminal of ['SDA', 'SCL']) branches.push({ id: `${component.id}:pullup:${terminal}`, componentId: component.id, kind: 'resistor', a: node('VCC'), b: node(terminal), value: 4700 });
+        const ratio = component.properties.contrast;
+        // End stops retain a finite 1 ohm contact, avoiding zero resistance stamps.
+        branches.push({ id: `${component.id}:contrast:top`, componentId: component.id, kind: 'resistor', a: node('VCC'), b: node('LCD_VO'), value: Math.max(1, ratio * 10000) },
+          { id: `${component.id}:contrast:bottom`, componentId: component.id, kind: 'resistor', a: node('LCD_VO'), b: node('GND'), value: Math.max(1, (1 - ratio) * 10000) });
+        const latch = ownInput(inputs.pcf8574, component.id) ?? 0;
+        for (const [bit, terminal] of ['RS','RW','E','A','D4','D5','D6','D7'].entries()) {
+          if (bit === 3) continue;
+          const high = (latch & (1 << bit)) !== 0;
+          branches.push({ id: `${component.id}:port:${bit}`, componentId: component.id, kind: 'resistor', a: node(`LCD_${terminal}`), b: node(high ? 'VCC' : 'GND'), value: high ? 10000 : 100 });
+        }
+        if ((latch & 8) !== 0) branches.push({ id: `${component.id}:backlight`, componentId: component.id, kind: 'resistor', a: node('VCC'), b: node('LCD_A'), value: 220 });
+        break;
+      }
       // Illustrative standby load: 100 µA at 5 V. Protocol pulses are API-modeled.
+      case 'lcd-20x4': case 'lcd-16x2':
+        add('resistor', 'VDD', 'VSS', 5000);
+        branches.push({ id: `${component.id}:backlight`, componentId: component.id, kind: 'led', a: node('A'), b: node('K'), value: 3 });
+        break;
       case 'dht11':
         add('resistor', 'VCC', 'GND', 50000);
         branches.push({ id: `${component.id}:resistor:pullup`, componentId: component.id,

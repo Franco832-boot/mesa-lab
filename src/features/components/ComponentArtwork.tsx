@@ -1,3 +1,4 @@
+import { LcdArtwork } from './LcdArtwork';
 import { useId } from 'react';
 import type { ElectronicComponent, ComponentKind } from '../../model/types';
 import { artworkTransform, physicalSpecs, visualBounds } from '../../model/physical';
@@ -545,6 +546,19 @@ function BasicArtwork({
   const buttonLegs = componentDefinitions.pushbutton.sourcePins;
   const potLegs = componentDefinitions.potentiometer.sourcePins;
   switch (kind) {
+    case 'pcf8574': return <g data-testid="pcf-artwork">
+      <rect width="42" height="19" rx=".7" fill="#234d47" stroke="#133c35" strokeWidth=".4" />
+      <rect x="16" y="7" width="13" height="6" rx=".3" fill="#202724" />
+      <text x="22.5" y="10.7" fontSize="1.5" textAnchor="middle" fill="#d1d8c6">PCF8574</text>
+      <rect x="5" y="7" width="7" height="7" rx=".5" fill="#306bb6" /><circle cx="8.5" cy="10.5" r="2" fill="#d2d2be" /><path d="M7 10.5h3" stroke="#5f6660" strokeWidth=".4" />
+      <text x="28" y="17" fontSize="1.7" fill="#d5dfcb">I²C · LCD</text>
+      {componentDefinitions.pcf8574.sourcePins.map((pin) => <g key={pin.id}>
+        {pin.position.x < 0 && <path d={`M0 ${pin.position.y}H${pin.position.x}`} stroke="#c3c9b0" strokeWidth=".6" />}
+        <circle cx={pin.position.x} cy={pin.position.y} r=".8" fill="#c7b578" />
+        {pin.position.x < 0 && <text x=".5" y={pin.position.y + .5} fontSize="1.2" fill="#e3e7cd">{pin.id}</text>}
+      </g>)}
+    </g>;
+    case 'lcd-20x4': case 'lcd-16x2': return <LcdArtwork kind={kind} {...(result?.lcd ? { view: result.lcd } : {})} />;
     case 'dht11': return <g data-testid="dht11-artwork">
       <rect data-testid="dht11-pcb" width="16" height="22" rx="0.6" fill="#202c2a" stroke="#111b19" strokeWidth="0.3" />
       {[1.1, 14.9].map((x) => <circle key={x} cx={x} cy="4.2" r="0.8" fill="#d1c6a6" stroke="#71776b" strokeWidth="0.25" />)}

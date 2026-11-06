@@ -59,6 +59,32 @@ const byId = (id: string) => `[data-testid="${id}"]`;
 const backups = () => Object.keys(localStorage).filter((key) => key.startsWith(EXAMPLE_BACKUP_PREFIX));
 
 describe('independent project library and existing right tools', () => {
+  it('configures the PCF address through the existing inspector and exposes LCD results without an editable text field', async () => {
+    const current = await mount();
+    await click(byId('library-toggle')); await click(`${byId('example-lcd16-i2c')} button`);
+    const selectPart = async (id: string) => {
+      const part = container.querySelector(`[data-reference="${id}"]`);
+      if (!(part instanceof SVGElement)) throw new Error('Missing circuit part');
+      await act(async () => { part.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    };
+    await selectPart('adapter');
+    const label = [...container.querySelectorAll('label.property-field')].find((item) => item.textContent?.includes('Dirección I²C'));
+    const address = label?.querySelector('select');
+    if (!(address instanceof HTMLSelectElement)) throw new Error('Missing address inspector field');
+    await act(async () => { address.value = '63'; address.dispatchEvent(new Event('change', { bubbles: true })); });
+    const adapter = current.store.getState().project.document.components.find((part) => part.kind === 'pcf8574');
+    expect(adapter?.properties.address).toBe(63);
+    await selectPart('lcd');
+    expect(container.textContent).toContain('16 × 2');
+    expect(container.querySelector('[data-reference="lcd"] [data-lcd-row="0"]')?.getAttribute('aria-label')).toBe('');
+    await click(byId('simulation-start'));
+    expect(control('lcd-status').textContent).toContain('Alimentación válida');
+    expect(container.querySelector('[data-reference="lcd"] [data-lcd-row="0"]')?.getAttribute('aria-label')).toBe(' '.repeat(16));
+    const lcd = current.store.getState().project.document.components.find((part) => part.id === 'lcd');
+    expect(lcd?.properties).toEqual({ controller: 'HD44780' });
+    await act(async () => { await current.saveNow(); });
+    expect(parseProject(serializeProject(current.store.getState().project.document)).components.find((part) => part.kind === 'pcf8574')?.properties.address).toBe(63);
+  });
   it('routes the top-left button exclusively to projects and the purple arrow exclusively to right tools', async () => {
     const current = await mount();
     const stage = container.querySelector('[data-testid="workspace-stage"]');

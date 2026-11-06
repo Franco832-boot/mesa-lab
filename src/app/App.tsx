@@ -376,7 +376,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       </ContextualInspector>
     ) : null;
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-simulation-status={simulation.status}>
       <header className="app-header">
         <a
           className="brand"

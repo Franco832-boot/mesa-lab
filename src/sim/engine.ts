@@ -1,4 +1,6 @@
 import { componentDefinitions } from '../model/components';
+import { isLcdKind } from '../model/lcd';
+import { lcdView } from './lcdView';
 import type { CircuitProject } from '../model/types';
 import { evaluateDc } from './dc';
 import { validateInputs } from './inputs';
@@ -71,7 +73,7 @@ export function evaluateCircuit(project: CircuitProject, inputs: SimulationInput
     const state: ComponentResult = { condition: 'normal' };
     if (component.kind === 'led') state.brightness = 0;
     if (component.kind === 'pushbutton' && component.properties.normallyClosed !== (ownInput(inputs.buttons, component.id) ?? false)) state.condition = 'active';
-    if (branch && component.kind !== 'arduino-uno' && component.kind !== 'esp8266') {
+    if (branch && component.kind !== 'arduino-uno' && component.kind !== 'esp8266' && component.kind !== 'pcf8574' && !isLcdKind(component.kind)) {
       const a = dc.voltages.get(branch.a), b = dc.voltages.get(branch.b);
       if (a !== undefined && b !== undefined && dc.references.get(branch.a) === dc.references.get(branch.b)) state.voltage = a - b;
       const current = dc.currents.get(branch.id);
@@ -93,6 +95,18 @@ export function evaluateCircuit(project: CircuitProject, inputs: SimulationInput
         const hasExternalWire = componentDefinitions[component.kind].pins.some((pin) => topology.connectedPins.has(pinKey(component.id, pin.id)));
         if (hasExternalWire) diagnostics.push({ code: 'open-circuit', severity: 'warning', componentIds: [component.id], pinIds: [] });
       }
+    }
+    if (isLcdKind(component.kind)) {
+      const groundNode = topology.nodeByPin.get(pinKey(component.id, 'VSS'));
+      const ground = groundNode === undefined ? undefined : dc.voltages.get(groundNode);
+      const voltage = (terminal: string) => {
+        const node = topology.nodeByPin.get(pinKey(component.id, terminal));
+        const value = node === undefined ? undefined : dc.voltages.get(node);
+        return node !== undefined && groundNode !== undefined && ground !== undefined && value !== undefined && dc.references.get(node) === dc.references.get(groundNode) ? value - ground : undefined;
+      };
+      state.lcd = lcdView(component.kind, ownInput(inputs.lcd, component.id), voltage, dc.currents.get(`${component.id}:backlight`));
+      const supply = voltage('VDD');
+      if (supply !== undefined) { state.voltage = supply; state.current = supply / 5000; state.power = supply * supply / 5000; }
     }
     if (component.kind === 'dht11') {
       const currents = branches.map((segment) => dc.currents.get(segment.id));

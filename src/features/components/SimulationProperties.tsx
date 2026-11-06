@@ -30,6 +30,12 @@ export function SimulationProperties({
   return (
     <section className="simulation-properties" aria-label={t('electricalResults')}>
       <h4>{t('electricalResults')}</h4>
+      {result?.lcd && <dl className="electrical-values" data-testid="lcd-status">
+        <div><dt>{t('lcdPower')}</dt><dd>{t(result.lcd.powered ? 'lcdPowered' : 'lcdUnpowered')}</dd></div>
+        <div><dt>{t('lcdBacklight')}</dt><dd>{value(result.lcd.backlight * 100, '%')}</dd></div>
+        <div><dt>{t('lcdContrast')}</dt><dd>{value(result.lcd.contrast * 100, '%')}</dd></div>
+        <div><dt>{t('lcdConnection')}</dt><dd>{t(result.lcd.connection === 'parallel' ? 'lcdParallel' : result.lcd.connection === 'i2c' ? 'lcdI2c' : 'lcdNoConnection')}</dd></div>
+      </dl>}
       {component.kind === 'dht11' && running && <div data-testid="dht11-live">
         <p>{t('dhtLive')}</p>
         <NumberProperty label="dhtTemperature" value={ownInput(simulation.inputs.dht11, component.id)?.temperature ?? component.properties.temperature}
@@ -43,9 +49,9 @@ export function SimulationProperties({
           <div><dt>{t('status')}</dt><dd>{t(conditionMessages[result.condition])}</dd></div>
           {!board && component.kind !== 'breadboard' && (
             <>
-              <div><dt>{t('voltageDrop')}</dt><dd>{value(result.voltage, 'V')}</dd></div>
-              <div><dt>{t('currentValue')}</dt><dd>{value(result.current, 'A')}</dd></div>
-              <div><dt>{t('powerDissipation')}</dt><dd>{value(result.power, 'W')}</dd></div>
+              <div><dt>{t(result.lcd ? 'lcdLogicVoltage' : 'voltageDrop')}</dt><dd>{value(result.voltage, 'V')}</dd></div>
+              <div><dt>{t(result.lcd ? 'lcdLogicCurrent' : 'currentValue')}</dt><dd>{value(result.current, 'A')}</dd></div>
+              <div><dt>{t(result.lcd ? 'lcdLogicPower' : 'powerDissipation')}</dt><dd>{value(result.power, 'W')}</dd></div>
             </>
           )}
           {component.kind === 'led' && (

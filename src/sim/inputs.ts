@@ -3,11 +3,18 @@ import type { CircuitProject } from '../model/types';
 import { pinKey } from './topology';
 import type { SimulationInputs, SimulationIssue } from './types';
 import { validDhtEnvironment } from '../model/dht11';
+import { isLcdKind, validLcdController } from '../model/lcd';
 
 export function validateInputs(project: CircuitProject, inputs: SimulationInputs): SimulationIssue[] {
   const components = new Map(project.components.map((component) => [component.id, component]));
   const issues: SimulationIssue[] = [];
   const invalid = (componentIds: string[], pinIds: string[] = []) => issues.push({ code: 'invalid-input', severity: 'error', componentIds, pinIds });
+  for (const [id, controller] of Object.entries(inputs.lcd ?? {})) {
+    if (!isLcdKind(components.get(id)?.kind ?? '') || !validLcdController(controller)) invalid([id]);
+  }
+  for (const [id, latch] of Object.entries(inputs.pcf8574 ?? {})) {
+    if (components.get(id)?.kind !== 'pcf8574' || !Number.isInteger(latch) || latch < 0 || latch > 255) invalid([id]);
+  }
   for (const [id, environment] of Object.entries(inputs.dht11 ?? {})) {
     if (components.get(id)?.kind !== 'dht11' || !validDhtEnvironment(environment)) invalid([id]);
   }

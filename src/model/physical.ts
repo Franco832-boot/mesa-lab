@@ -24,6 +24,9 @@ const ledUnitsPerMm = 46 / 5;
 const resistorUnitsPerMm = 74 / 6.3;
 export const physicalSpecs: Record<ComponentKind, PhysicalSpec> = {
   // Approx. 16 × 27 mm overall, including the 5 mm header tails.
+  pcf8574: { model: 'PCF8574 backpack, YWROBOT pin mapping', widthMm: 42, heightMm: 19, sourceBody: { x: 0, y: 0, width: 42, height: 19 }, sourceViewBox: { x: -6, y: -1, width: 49, height: 21 } },
+  'lcd-20x4': { model: 'HD44780 2004 module', widthMm: 98, heightMm: 60, sourceBody: { x: 0, y: 0, width: 98, height: 60 }, sourceViewBox: { x: -1, y: -1, width: 100, height: 62 } },
+  'lcd-16x2': { model: 'HD44780 1602 module', widthMm: 80, heightMm: 36, sourceBody: { x: 0, y: 0, width: 80, height: 36 }, sourceViewBox: { x: -1, y: -1, width: 82, height: 38 } },
   dht11: { model: 'Joy-IT KY-015 DHT11 module (S, +, −)', widthMm: 16, heightMm: 22,
     sourceBody: { x: 0, y: 0, width: 16, height: 22 }, sourceViewBox: { x: -0.5, y: -0.5, width: 17, height: 28 } },
   'arduino-uno': {

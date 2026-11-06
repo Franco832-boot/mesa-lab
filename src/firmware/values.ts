@@ -32,7 +32,7 @@ export function integerLiteral(token: string, board: BoardKind, at: SourceSpan):
     if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) return fail('invalid-value', at);
     return { type: 'float', value: Math.fround(value) };
   }
-  const match = /^(0|[1-9][0-9]*)([uU][lL]?|[lL][uU]?)?$/.exec(token);
+  const match = /^(0[xX][0-9a-fA-F]+|0|[1-9][0-9]*)([uU][lL]?|[lL][uU]?)?$/.exec(token);
   if (!match?.[1]) return fail('invalid-value', at);
   const n = Number(match[1]),
     suffix = match[2]?.toLowerCase() ?? '';

@@ -1,5 +1,7 @@
 # Educational project library
 
+The subsequent [LCD milestone](LCD.md) extends this same catalog with four display templates. The three original examples, panel ownership and loading workflow below are retained.
+
 ## Controls and shared panel architecture
 
 Before this change, `App.tsx`'s top-left `library-toggle` and `ToolSidebar.tsx`'s purple `sidebar-toggle` both called `toggleLibrary` and controlled the same right-hand tools panel.

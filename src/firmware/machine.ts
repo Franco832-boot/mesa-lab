@@ -1,3 +1,5 @@
+import { constructI2cLcd, constructLcd, lcdMethod } from './lcdRuntime';
+import type { LcdObject } from './lcdRuntime';
 import type { BoardKind, GpioState } from '../model/types';
 import type { ValueType } from './ast';
 import type { UnoProgram } from './compiler';
@@ -31,7 +33,7 @@ export interface UnoExecution {
   loopWaited: boolean;
   scopes: readonly ReadonlyMap<string, Variable>[];
   operands: readonly Value[];
-  objects: ReadonlyMap<string, DhtObject>;
+  objects: ReadonlyMap<string, ({ type: 'dht'; value: DhtObject } | LcdObject)>;
   hardware: ReadonlyMap<string, HardwareSample>;
   serial: SerialState;
   modes: Readonly<Record<string, GpioState['mode']>>;
@@ -62,7 +64,7 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
   const gpio: UnoGpioEvent[] = [];
   const objects = new Map(previous.objects), hardware = new Map(previous.hardware);
   let serial = previous.serial;
-  let steps = 0;
+  let steps = 0, lcdTransfers = 0;
   const finish = (yielded: boolean): UnoAdvanceResult => ({
     execution: { ...previous, timeUs, timeMs: timeUs / 1000, phase, pc, wakeAtUs, wakeReason, wakeAt: wakeAtUs === null ? null : wakeAtUs / 1000,
       pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial },
@@ -89,34 +91,71 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
     loopWaited = false;
     if (wakeAtUs !== null && !Number.isSafeInteger(wakeAtUs)) fail('invalid-value', at);
   };
+  const beginWire = () => {
+    if (previous.board !== 'arduino-uno') return fail('invalid-value');
+    for (const pinId of ['A4', 'A5']) {
+      modes[pinId] = 'input'; levels[pinId] = 'LOW';
+      gpio.push({ atMs: timeUs / 1000, pinId, state: { mode: 'input', level: 'FLOATING' } });
+    }
+  };
   for (;;) {
     if (wakeAtUs !== null) {
       if (wakeAtUs > target) { timeUs = target; return finish(false); }
       timeUs = wakeAtUs; wakeAtUs = null; wakeReason = null;
     }
-    if (steps >= budget) return finish(true);
+    // LCD operations may invoke electrical probes. Bound peripheral work as
+    // well as scalar instructions; long prints are compiled in 32-char chunks.
+    if (steps >= budget || lcdTransfers >= 8) return finish(true);
     const instruction = previous.program.code[pc++];
     if (!instruction) return fail('unsupported-syntax');
     const at = instruction.at;
     steps++;
     switch (instruction.op) {
+      case 'wire-begin': beginWire(); break;
       case 'construct': {
-        const type = pop(at).value, pin = pop(at).value;
-        if (instruction.className !== 'DHT' || instruction.arity !== 2) return fail('unsupported-syntax', at);
-        objects.set(instruction.name, constructDht(pin, type, previous.board, at)); break;
+        const args = operands.splice(operands.length - instruction.arity, instruction.arity).map((value) => value.value);
+        if (instruction.className === 'DHT' && instruction.arity === 2) {
+          objects.set(instruction.name, { type: 'dht', value: constructDht(args[0] ?? NaN, args[1] ?? NaN, previous.board, at) });
+        } else if (instruction.className === 'LiquidCrystal') objects.set(instruction.name, constructLcd(args, previous.board, at));
+        else if (instruction.className === 'LiquidCrystal_I2C') objects.set(instruction.name, constructI2cLcd(args, previous.board, at));
+        else return fail('unsupported-syntax', at);
+        break;
+      }
+      case 'lcd-text': case 'lcd-call': {
+        lcdTransfers++;
+        const object = objects.get(instruction.receiver);
+        if (object?.type !== 'lcd') return fail('name-error', at);
+        if (instruction.op === 'lcd-text') {
+          if (object.began) host?.writeLcd?.(object.bus, { kind: 'print', text: instruction.text }, gpio);
+        } else {
+          const args = operands.splice(operands.length - instruction.arity, instruction.arity);
+          const result = lcdMethod(object, instruction.name, args, at);
+          objects.set(instruction.receiver, result.object);
+          if (result.operation?.kind === 'init' && result.object.bus.kind === 'parallel') {
+            for (const pinId of result.object.bus.pins) {
+              modes[pinId] = 'output'; levels[pinId] = 'LOW';
+              gpio.push({ atMs: timeUs / 1000, pinId, state: { mode: 'output', level: 'LOW' } });
+            }
+          }
+          if (result.operation?.kind === 'init' && result.object.bus.kind === 'i2c') beginWire();
+          if (result.operation) host?.writeLcd?.(result.object.bus, result.operation, gpio);
+        }
+        break;
       }
       case 'method': {
-        const object = objects.get(instruction.receiver) ?? fail('name-error', at);
+        const instance = objects.get(instruction.receiver);
+        if (instance?.type !== 'dht') return fail('name-error', at);
+        const object = instance.value;
         if (instruction.name === 'begin') {
           if (previous.board === 'esp8266' && object.pinId === 'D0') return fail('invalid-value', at);
-          objects.set(instruction.receiver, { ...object, beganAtUs: timeUs, attemptAtUs: null, sample: null });
+          objects.set(instruction.receiver, { type: 'dht', value: { ...object, beganAtUs: timeUs, attemptAtUs: null, sample: null } });
           modes[object.pinId] = 'input-pullup'; levels[object.pinId] = 'HIGH';
           gpio.push({ atMs: timeUs / 1000, pinId: object.pinId, state: { mode: 'input-pullup', level: 'FLOATING' } });
           operands.push({ type: 'int', value: 0 });
         } else {
           const observation = host?.observeDht(object.pinId, timeUs, gpio) ?? null;
           const next = readDht(object, observation, timeUs, hardware);
-          objects.set(instruction.receiver, next);
+          objects.set(instruction.receiver, { type: 'dht', value: next });
           operands.push({ type: 'float', value: next.sample ? instruction.name === 'readTemperature' ? next.sample.temperature : next.sample.humidity : NaN });
         }
         break;
