@@ -137,7 +137,7 @@ export const es = {
   boardCodeTitle: "Código de la placa",
   boardSource: "Código fuente Arduino C++",
   boardCodeStorageNote: "El código pertenece a esta placa y se guarda con el proyecto. Cada programa se conserva al cambiar de herramienta o placa.",
-  boardCodeExecutionNote: "Solo edición y guardado. El código no se compila ni se ejecuta; la ejecución de firmware no está disponible.",
+  boardCodeExecutionNote: "Al iniciar se ejecuta main.ino: setup(), loop(), pinMode(INPUT/OUTPUT), digitalWrite y delay con valores literales. Para aplicar cambios, detén e inicia de nuevo. Sin C++ completo, otros archivos, digitalRead, UART ni WiFi.",
   boardCodePlaceholder: "Escribe o pega el programa para esta placa…",
   programCharacters: "caracteres",
   resizeTools: 'Cambiar ancho del panel',

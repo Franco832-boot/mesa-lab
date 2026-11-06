@@ -7,6 +7,7 @@ import { initialSimulation, transitionSimulation } from './runtime';
 import { nextFirmwareDelay } from './firmwareRuntime';
 
 const blink = (pin = '13', period = 1000) => `void setup(){pinMode(${pin}, OUTPUT);} void loop(){digitalWrite(${pin}, HIGH);delay(${period});digitalWrite(${pin}, LOW);delay(${period});}`;
+const delayedModeFailure = 'void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);pinMode(A5,OUTPUT);digitalWrite(A5,HIGH);}void loop(){delay(10);digitalWrite(12,HIGH);}';
 const wire = (id: string, a: string, pa: string, b: string, pb: string) => ({ id,
   from: { componentId: a, pinId: pa }, to: { componentId: b, pinId: pb }, color: '#668c75', waypoints: [] });
 function fixture(reversed = false): CircuitProject {
@@ -41,6 +42,95 @@ describe('source execution through the shared electrical circuit', () => {
     const state = transitionSimulation(initialSimulation(), run('uno', blink()), doc);
     expect(state.inputs.gpio?.[pinKey('uno', 'D13')]?.level).toBe('HIGH');
     expect(state.snapshot?.components.led?.brightness).toBe(0);
+  });
+  it.each([
+    { error: 'pin-not-output', source: delayedModeFailure },
+    { error: 'step-limit', source: 'void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);pinMode(A5,OUTPUT);digitalWrite(A5,HIGH);delay(10);}void loop(){}' },
+  ])('releases active outputs and recalculates the circuit after a delayed $error', ({ error, source }) => {
+    const doc = fixture(), documentBefore = serializeProject(doc);
+    let state = transitionSimulation(initialSimulation(), run('uno', source), doc);
+    expect(state.firmware.uno?.error).toBeNull();
+    expect(state.inputs.gpio?.[pinKey('uno', 'A5')]).toEqual({ mode: 'output', level: 'HIGH' });
+    expect(state.snapshot?.components.led?.current).toBeCloseTo(3 / 370, 10);
+    const initialSnapshot = state.snapshot;
+    state = transitionSimulation(state, advance(9), doc);
+    expect(state.snapshot).toBe(initialSnapshot);
+    const beforeFailure = state;
+    state = transitionSimulation(state, advance(1), doc);
+    expect(state.firmware.uno).toMatchObject({ source, execution: null, error });
+    expect(state.inputs.gpio).toEqual({});
+    expect(state.snapshot).not.toBe(initialSnapshot);
+    expect(state.snapshot?.components.led?.current).toBe(0);
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+    expect(state.snapshot?.pins[pinKey('uno', '5V')]?.voltage).toBeCloseTo(5, 10);
+    expect(state.status).toBe('running');
+    expect(nextFirmwareDelay(state)).toBeNull();
+    expect(transitionSimulation(state, advance(1000), doc)).toBe(state);
+    expect(beforeFailure.inputs.gpio?.[pinKey('uno', 'D13')]).toEqual({ mode: 'output', level: 'HIGH' });
+    expect(beforeFailure.snapshot?.components.led?.current).toBeCloseTo(3 / 370, 10);
+    expect(serializeProject(doc)).toBe(documentBefore);
+  });
+  it.each(['uno', 'other'] as const)('isolates a delayed failure from another UNO and an independent supply when %s starts first', (first) => {
+    const doc = fixture();
+    doc.components.push(
+      createComponent('arduino-uno', { x: 0, y: 0 }, 'other'),
+      createComponent('resistor', { x: 0, y: 0 }, 'other-r'),
+      createComponent('led', { x: 0, y: 0 }, 'other-led'),
+      createComponent('power-supply', { x: 0, y: 0 }, 'supply'),
+      createComponent('resistor', { x: 0, y: 0 }, 'supply-r'),
+      createComponent('led', { x: 0, y: 0 }, 'supply-led'),
+    );
+    doc.wires.push(
+      wire('other-out', 'other', 'D13', 'other-r', '1'),
+      wire('other-led', 'other-r', '2', 'other-led', 'anode'),
+      wire('other-return', 'other-led', 'cathode', 'other', 'GND'),
+      wire('supply-out', 'supply', 'positive', 'supply-r', '1'),
+      wire('supply-led', 'supply-r', '2', 'supply-led', 'anode'),
+      wire('supply-return', 'supply-led', 'cathode', 'supply', 'negative'),
+    );
+    const documentBefore = serializeProject(doc);
+    let state = initialSimulation();
+    for (const id of first === 'uno' ? ['uno', 'other'] : ['other', 'uno']) {
+      state = transitionSimulation(state, run(id, id === 'uno' ? delayedModeFailure : blink('13', 10)), doc);
+    }
+    expect(state.snapshot?.components['other-led']?.current).toBeCloseTo(3 / 370, 10);
+    expect(state.snapshot?.components['supply-led']?.current).toBeCloseTo(3 / 330, 10);
+    const beforeFailure = state;
+    state = transitionSimulation(state, advance(10), doc);
+    expect(state.firmware.uno?.error).toBe('pin-not-output');
+    expect(state.inputs.gpio?.[pinKey('uno', 'D13')]).toBeUndefined();
+    expect(state.inputs.gpio?.[pinKey('uno', 'A5')]).toBeUndefined();
+    expect(state.inputs.gpio?.[pinKey('other', 'D13')]).toEqual({ mode: 'output', level: 'LOW' });
+    expect(state.firmware.other?.error).toBeNull();
+    expect(state.firmware.other?.execution?.timeMs).toBe(10);
+    expect(state.snapshot?.components.led?.brightness).toBe(0);
+    expect(state.snapshot?.components['other-led']?.current).toBe(0);
+    expect(state.snapshot?.components['supply-led']?.current).toBeCloseTo(3 / 330, 10);
+    expect(state.virtualNetwork).toBe(beforeFailure.virtualNetwork);
+    expect(state.status).toBe('running');
+    expect(nextFirmwareDelay(state)).toBe(10);
+    state = transitionSimulation(state, advance(10), doc);
+    expect(state.inputs.gpio?.[pinKey('uno', 'D13')]).toBeUndefined();
+    expect(state.inputs.gpio?.[pinKey('other', 'D13')]).toEqual({ mode: 'output', level: 'HIGH' });
+    expect(state.snapshot?.components['other-led']?.current).toBeCloseTo(3 / 370, 10);
+    expect(state.snapshot?.components['supply-led']?.current).toBeCloseTo(3 / 330, 10);
+    expect(serializeProject(doc)).toBe(documentBefore);
+  });
+  it('releases a failed UNO output to high impedance while preserving an externally driven shared node', () => {
+    const doc = fixture();
+    doc.wires = [wire('gnd', 'uno', 'GND', 'esp', 'GND'), wire('shared', 'uno', 'D13', 'esp', 'D1')];
+    let state = transitionSimulation(initialSimulation(), run('uno', delayedModeFailure), doc);
+    state = transitionSimulation(state, run('esp', blink('D1')), doc);
+    expect(state.snapshot?.pins[pinKey('uno', 'D13')]?.voltage).toBeCloseTo((5 / 40 + 3.3 / 50) / (1 / 40 + 1 / 50), 8);
+    const otherGpio = state.inputs.gpio?.[pinKey('esp', 'D1')];
+    state = transitionSimulation(state, advance(10), doc);
+    expect(state.firmware.uno?.error).toBe('pin-not-output');
+    expect(state.inputs.gpio?.[pinKey('uno', 'D13')]).toBeUndefined();
+    expect(state.inputs.gpio?.[pinKey('esp', 'D1')]).toBe(otherGpio);
+    expect(state.firmware.esp?.error).toBeNull();
+    expect(state.snapshot?.pins[pinKey('uno', 'D13')]?.voltage).toBeCloseTo(3.3, 10);
+    expect(state.snapshot?.pins[pinKey('esp', 'D1')]?.voltage).toBeCloseTo(3.3, 10);
+    expect(nextFirmwareDelay(state)).toBe(990);
   });
   it('keeps UNO and ESP8266 programs and virtual timing independent', () => {
     const doc = fixture();

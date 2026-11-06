@@ -1,5 +1,15 @@
 import type { TranslationKey } from '../../locales/es/messages';
 import type { ComponentCondition, DiagnosticCode, PinResult, SimulationIssue } from '../../sim/types';
+import type { UnoErrorCode } from '../../firmware/uno';
+
+export const firmwareErrorMessages: Record<UnoErrorCode, TranslationKey> = {
+  'unsupported-syntax': 'firmwareSyntaxError',
+  'invalid-value': 'firmwareValueError',
+  'source-limit': 'firmwareSourceLimit',
+  'instruction-limit': 'firmwareInstructionLimit',
+  'step-limit': 'firmwareStepLimit',
+  'pin-not-output': 'firmwareModeError',
+};
 
 export const conditionMessages: Record<ComponentCondition, TranslationKey> = {
   normal: 'conditionNormal',

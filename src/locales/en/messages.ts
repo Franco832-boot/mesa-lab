@@ -139,7 +139,7 @@ export const en = {
   boardCodeTitle: "Board code",
   boardSource: "Arduino C++ source",
   boardCodeStorageNote: "Code belongs to this board and is saved with the project. Switching tools or boards keeps each program.",
-  boardCodeExecutionNote: "Editing and saving only. Code is not compiled or executed; firmware execution is unavailable.",
+  boardCodeExecutionNote: "Starting runs main.ino: setup(), loop(), pinMode(INPUT/OUTPUT), digitalWrite and delay with literal values. Stop and start again to apply edits. Full C++, other files, digitalRead, UART and WiFi are unsupported.",
   boardCodePlaceholder: "Write or paste the program for this board…",
   programCharacters: "characters",
   resizeTools: 'Resize tools panel',

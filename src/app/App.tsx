@@ -12,6 +12,7 @@ import { screenToWorld } from '../model/coordinates';
 import { useCircuitEditor } from '../features/project/useCircuitEditor';
 import { WireInspector } from '../features/components/WireInspector';
 import { MAX_PROJECT_BYTES, serializeProject } from '../model/project';
+import { sourceFiles } from '../model/programFiles';
 import { useProject } from '../features/project/useProject';
 import { ComponentLibrary } from '../features/components/ComponentLibrary';
 import { Inspector } from '../features/components/Inspector';
@@ -486,6 +487,14 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
               setConnectionRequest(null);
               setConsoleOpen(true);
               simulation.start();
+              if (simulation.status === 'stopped') {
+                for (const board of boardContext.boards) {
+                  const program = project.programs.find((item) => item.componentId === board.id);
+                  if (!program) continue;
+                  const main = sourceFiles(program).find((file) => file.name === 'main.ino');
+                  simulation.runFirmware(board.id, main?.source ?? '');
+                }
+              }
             }}
           >
             <Icon name="play" size={14} />
@@ -675,6 +684,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             status={simulation.status}
             locked={locked}
             diagnostics={simulation.snapshot?.diagnostics ?? null}
+            firmware={simulation.firmware}
             initialIssue={initialIssue}
             components={project.components}
             onNavigate={navigateDiagnostic}

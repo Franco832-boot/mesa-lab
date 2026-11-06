@@ -55,9 +55,12 @@ describe('board code workspace', () => {
     expect(markup).not.toContain('<textarea');
     expect(markup).toContain('data-testid="board-context-header"');
   });
-  it('distinguishes code storage from unavailable firmware execution', () => {
+  it('explains saved main.ino execution and the supported GPIO subset without adding editor controls', () => {
     const { markup } = render(uno, undefined);
-    expect(markup).toContain('no se compila ni se ejecuta');
+    expect(markup).toContain('Al iniciar se ejecuta main.ino');
+    expect(markup).toContain('pinMode(INPUT/OUTPUT)');
+    expect(markup).toContain('Para aplicar cambios, detén e inicia de nuevo');
+    expect(markup).toContain('Sin C++ completo, otros archivos, digitalRead, UART ni WiFi');
     expect(markup).toContain('sin hardware WiFi');
     expect(markup).toContain('data-testid="code-board-tab"');
     expect(markup).not.toContain('data-testid="firmware-run"');

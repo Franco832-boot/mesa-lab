@@ -49,10 +49,154 @@ function dualDeviceFixture() {
     wire('gnd-two', 'led-two', 'cathode', 'esp-two', 'GND'),
   ]);
 }
+const blink = (pin = '13', period = 1000) => `void setup(){pinMode(${pin},OUTPUT);}void loop(){digitalWrite(${pin},HIGH);delay(${period});digitalWrite(${pin},LOW);delay(${period});}`;
+function firmwareFixture() {
+  return project([
+    component('arduino-uno', 'uno', 60, 70, { logicVoltage: 5 }),
+    component('resistor', 'r-uno', 300, 100, { resistance: 330 }),
+    component('led', 'led-uno', 430, 100, { color: 'red' }),
+    component('esp8266', 'esp', 60, 370, { logicVoltage: 3.3 }),
+    component('resistor', 'r-esp', 300, 400, { resistance: 330 }),
+    component('led', 'led-esp', 430, 400, { color: 'red' }),
+  ], [
+    wire('out-uno', 'uno', 'D13', 'r-uno', '1'),
+    wire('anode-uno', 'r-uno', '2', 'led-uno', 'anode'),
+    wire('gnd-uno', 'led-uno', 'cathode', 'uno', 'GND'),
+    wire('out-esp', 'esp', 'D1', 'r-esp', '1'),
+    wire('anode-esp', 'r-esp', '2', 'led-esp', 'anode'),
+    wire('gnd-esp', 'led-esp', 'cathode', 'esp', 'GND'),
+  ]);
+}
+const savedProgram = (componentId, source) => ({
+  componentId, language: 'arduino-cpp', execution: 'unavailable', source,
+});
+async function freezeClock(page) {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
+}
 async function assertSameNode(handle, selector) {
   assert.equal(await handle.evaluate((node, selector) =>
     node.isConnected && node === document.querySelector(selector), selector), true);
 }
+
+test('saved Blink runs from Start, advances the electrical LED, resumes without setup and stops', async (t) => {
+  const document = firmwareFixture();
+  const page = await openFixture(harness.browser, t, document);
+  await tools(page, 'code');
+  await panel(page, 'code').locator('[data-testid="code-board-tab"][data-board-id="uno"]').click();
+  await panel(page, 'code').getByTestId('board-code-editor').fill(blink());
+  const saved = await save(page);
+  assert.equal(saved.programs.find((program) => program.componentId === 'uno').files.find((file) => file.name === 'main.ino').source, blink());
+  // Reload proves Start reads the persisted document rather than a temporary editor buffer.
+  await page.reload();
+  await status(page, 'stopped');
+  await freezeClock(page);
+  await page.getByTestId('simulation-start').click();
+  await status(page, 'running');
+  await brightness(page, 'led-uno', true);
+  assert.ok(Math.abs(Number(await part(page, 'led-uno').getAttribute('data-brightness')) - (5 - 2) / (330 + 40) / 0.02) < 1e-9);
+  assert.equal(await page.getByTestId('firmware-error').count(), 0);
+  await page.clock.runFor(1000);
+  await brightness(page, 'led-uno', false);
+  await page.getByTestId('simulation-pause').click();
+  await status(page, 'paused');
+  await page.clock.runFor(5000);
+  await brightness(page, 'led-uno', false);
+  await page.getByTestId('simulation-start').click();
+  await status(page, 'running');
+  await brightness(page, 'led-uno', false);
+  await page.clock.runFor(1000);
+  await brightness(page, 'led-uno', true);
+  await page.getByTestId('simulation-stop').click();
+  await status(page, 'stopped');
+  await brightness(page, 'led-uno', false);
+  await page.clock.runFor(5000);
+  await brightness(page, 'led-uno', false);
+  await page.getByTestId('simulation-start').click();
+  await brightness(page, 'led-uno', true);
+  await page.getByTestId('simulation-stop').click();
+  const after = await save(page);
+  assert.deepEqual(after.programs, saved.programs);
+  assert.deepEqual(after.components, saved.components);
+  assert.deepEqual(after.wires, saved.wires);
+  assert.equal(after.firmware, undefined);
+});
+
+test('Start matches programs by board ID and runs main.ino instead of the first or selected header', async (t) => {
+  const document = firmwareFixture();
+  document.programs = [
+    savedProgram('esp', blink('D1', 250)),
+    { ...savedProgram('uno', '#define NOT_EXECUTABLE 1'),
+      files: [{ name: 'config.h', source: '#define NOT_EXECUTABLE 1' }, { name: 'main.ino', source: blink() }],
+      activeFile: 'config.h' },
+  ];
+  const page = await openFixture(harness.browser, t, document);
+  await freezeClock(page);
+  await page.getByTestId('simulation-start').click();
+  await brightness(page, 'led-uno', true);
+  await brightness(page, 'led-esp', true);
+  assert.ok(Math.abs(Number(await part(page, 'led-esp').getAttribute('data-brightness')) - (3.3 - 2) / (330 + 50) / 0.02) < 1e-9);
+  assert.equal(await page.getByTestId('firmware-error').count(), 0);
+  await page.clock.runFor(250);
+  await brightness(page, 'led-uno', true);
+  await brightness(page, 'led-esp', false);
+  await page.clock.runFor(250);
+  await brightness(page, 'led-esp', true);
+  await page.clock.runFor(500);
+  await brightness(page, 'led-uno', false);
+  await brightness(page, 'led-esp', true);
+});
+
+for (const [invalidBoard, locale, errorText] of [
+  ['uno', 'es', 'Código no admitido o incorrecto'],
+  ['esp', 'en', 'Unsupported or malformed source'],
+]) {
+  test(`invalid ${invalidBoard} firmware reports its error in ${locale} while the other board runs`, async (t) => {
+    const document = firmwareFixture();
+    document.programs = [
+      savedProgram('uno', invalidBoard === 'uno' ? 'void setup(){Serial.begin(9600);}void loop(){}' : blink()),
+      savedProgram('esp', invalidBoard === 'esp' ? 'void setup(){WiFi.begin();}void loop(){}' : blink('D1')),
+    ];
+    const page = await openFixture(harness.browser, t, document, { locale });
+    await freezeClock(page);
+    await page.getByTestId('simulation-start').click();
+    await status(page, 'running');
+    const error = page.getByTestId('firmware-error');
+    assert.equal(await error.count(), 1);
+    assert.equal(await error.getAttribute('data-component-id'), invalidBoard);
+    assert.equal(await error.getAttribute('data-code'), 'unsupported-syntax');
+    assert.ok((await error.textContent()).includes(errorText));
+    await brightness(page, `led-${invalidBoard}`, false);
+    const healthy = invalidBoard === 'uno' ? 'esp' : 'uno';
+    await brightness(page, `led-${healthy}`, true);
+    await page.clock.runFor(1000);
+    await brightness(page, `led-${healthy}`, false);
+    await page.getByTestId('simulation-stop').click();
+    assert.equal(await page.getByTestId('firmware-error').count(), 0);
+  });
+}
+
+test('a delayed runtime error releases only the failed board and appears in the console', async (t) => {
+  const document = firmwareFixture();
+  document.programs = [
+    savedProgram('uno', 'void setup(){pinMode(13,OUTPUT);digitalWrite(13,HIGH);}void loop(){delay(10);digitalWrite(12,HIGH);}'),
+    savedProgram('esp', blink('D1', 50)),
+  ];
+  const page = await openFixture(harness.browser, t, document);
+  await freezeClock(page);
+  await page.getByTestId('simulation-start').click();
+  await brightness(page, 'led-uno', true);
+  await brightness(page, 'led-esp', true);
+  await page.clock.runFor(10);
+  await brightness(page, 'led-uno', false);
+  const error = page.getByTestId('firmware-error');
+  assert.equal(await error.getAttribute('data-component-id'), 'uno');
+  assert.equal(await error.getAttribute('data-code'), 'pin-not-output');
+  assert.match(await error.textContent(), /digitalWrite requires pinMode/);
+  await brightness(page, 'led-esp', true);
+  await page.clock.runFor(40);
+  await brightness(page, 'led-esp', false);
+});
 
 test('unified tabs, keyboard resizing and collapse preserve circuit DOM identity, zoom and wires', async (t) => {
   const page = await openFixture(harness.browser, t, workspaceFixture());

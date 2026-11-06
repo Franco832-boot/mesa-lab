@@ -5,7 +5,8 @@ import type { SimulationIssue } from '../../sim/types';
 import { Icon } from '../../shared/Icon';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { groupDiagnostics } from './diagnostics';
-import { statusMessages } from './messages';
+import { firmwareErrorMessages, statusMessages } from './messages';
+import type { FirmwareState } from './firmwareRuntime';
 import type { SimulationStatus } from './runtime';
 
 interface SimulationConsoleProps {
@@ -14,6 +15,7 @@ interface SimulationConsoleProps {
   status: SimulationStatus;
   locked: boolean;
   diagnostics: readonly SimulationIssue[] | null;
+  firmware?: FirmwareState;
   initialIssue: TranslationKey | null;
   components: readonly ElectronicComponent[];
   onNavigate: (ids: readonly string[]) => void;
@@ -25,11 +27,15 @@ export function SimulationConsole({
   status,
   locked,
   diagnostics,
+  firmware = {},
   initialIssue,
   components,
   onNavigate,
 }: SimulationConsoleProps) {
   const { t } = useLocale();
+  const failures = Object.entries(firmware).flatMap(([id, instance]) =>
+    instance.error ? [{ id, error: instance.error }] : [],
+  );
   return (
     <div className={`console-panel ${open ? 'open' : ''}`}>
       <button
@@ -42,7 +48,7 @@ export function SimulationConsole({
           <Icon name="terminal" size={15} />
           {t('console')}
           <span className="console-count">
-            {groupDiagnostics(diagnostics ?? []).length}
+            {groupDiagnostics(diagnostics ?? []).length + failures.length}
           </span>
         </span>
         <span className="console-right">
@@ -59,6 +65,11 @@ export function SimulationConsole({
           >
             <p>{t(locked ? 'simulationLocked' : 'simulationReady')}</p>
             {initialIssue && <p>{t(initialIssue)}</p>}
+            {failures.map(({ id, error }) => (
+              <p key={id} role="alert" data-testid="firmware-error" data-component-id={id} data-code={error}>
+                <strong>{id} · {t('firmwareError')}</strong>: {t(firmwareErrorMessages[error])}
+              </p>
+            ))}
             {diagnostics && (
               <DiagnosticsPanel
                 diagnostics={diagnostics}
