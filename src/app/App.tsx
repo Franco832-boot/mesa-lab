@@ -370,28 +370,18 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         <a
           className="brand"
           href="#"
-          aria-label="Mesa Circuit Lab"
+          aria-label="LosProfesParaVos"
           onClick={(event) => {
             event.preventDefault();
             setHelpOpen(true);
           }}
         >
           <span className="brand-mark">
-            <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
-              <path
-                d="M5 21V8l9 6 9-6v13m-9-7v7"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="5" cy="6" r="1.5" fill="currentColor" />
-              <circle cx="23" cy="6" r="1.5" fill="currentColor" />
-            </svg>
+            <img src="/losprofesparavos-isotype.png" alt="" width={28} height={28} />
           </span>
           <span className="brand-name">
-            mesa<span className="brand-dot">.</span>
-            <small>CIRCUIT LAB</small>
+            LosProfesParaVos
+            <small>{t('brandSubtitle')}</small>
           </span>
         </a>
         <div className="header-divider" />

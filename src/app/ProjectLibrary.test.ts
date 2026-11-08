@@ -186,7 +186,7 @@ describe('independent project library and existing right tools', () => {
     const help = element('.help-button'); help.focus();
     await click('.help-button');
     const dialog = element('dialog[open]');
-    expect(dialog.getAttribute('aria-label')).toBe(locale === 'es' ? 'Cómo usar Mesa Lab' : 'How to use Mesa Lab');
+    expect(dialog.getAttribute('aria-label')).toBe(locale === 'es' ? 'Cómo usar LosProfesParaVos' : 'How to use LosProfesParaVos');
     expect(dialog.querySelectorAll('.help-sections section')).toHaveLength(10);
     expect(dialog.textContent).toContain('DHT11'); expect(dialog.textContent).toContain('PCF8574');
     expect(dialog.textContent).toContain('Serial.println()');

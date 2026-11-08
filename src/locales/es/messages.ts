@@ -388,6 +388,7 @@ export const es = {
     'Selecciona otra pieza sin salir de Conectar y elige su terminal para completar el cable.',
 
   brandTagline: 'TU MESA DE ELECTRÓNICA',
+  brandSubtitle: 'ELECTRÓNICA',
   projectDefault: 'Mi primer laboratorio',
   projectName: 'Nombre del proyecto',
   localProject: 'Proyecto local',
@@ -466,7 +467,7 @@ export const es = {
   zoomOut: 'Alejar',
   fit: 'Ajustar mesa a la pantalla',
   grid: 'Mostrar u ocultar cuadrícula',
-  help: "Instructivo de Mesa Lab",
+  help: "Instructivo de LosProfesParaVos",
   language: 'Idioma',
   canvasLabel:
     'Mesa de electrónica: arrastra el fondo para desplazar y usa dos dedos o la rueda para acercar.',
@@ -504,7 +505,7 @@ export const es = {
   consoleEmpty: "Diagnósticos eléctricos",
   localOnly: 'Todo permanece en tu navegador',
   previewVersion: "Base IoT virtual",
-  helpTitle: "Cómo usar Mesa Lab",
+  helpTitle: "Cómo usar LosProfesParaVos",
   helpIntro: "Explorá electrónica y programación Arduino: construí un circuito, ejecutá su programa y observá cómo responde al cableado.",
   helpGestures: 'Navega por tu mesa',
   done: 'Entendido',

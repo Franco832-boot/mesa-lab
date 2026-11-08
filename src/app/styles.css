@@ -116,10 +116,12 @@ button {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  width: 170px;
 }
 .brand-mark {
   height: 37px;
   width: 37px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   background: var(--accent);
@@ -127,17 +129,16 @@ button {
   border-radius: 11px;
   box-shadow: 0 3px 6px #7659dc16;
 }
-.brand-mark svg {
+.brand-mark img {
   width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 .brand-name {
   font-weight: 750;
-  font-size: 28px;
-  letter-spacing: -1.3px;
+  font-size: 16px;
+  letter-spacing: -0.7px;
   line-height: 24px;
-}
-.brand-dot {
-  color: var(--accent);
 }
 .brand-name small {
   display: block;
@@ -1305,6 +1306,14 @@ button {
   }
 }
 @media (max-width: 1200px) {
+  .brand {
+    width: 154px;
+  }
+  .brand-name {
+    font-size: 14px;
+    letter-spacing: -0.5px;
+    white-space: nowrap;
+  }
   .app-header {
     gap: 19px;
     padding: 0 18px;
@@ -1393,15 +1402,16 @@ button {
     height: 31px;
     border-radius: 9px;
   }
-  .brand-mark svg {
+  .brand-mark img {
     width: 23px;
+    height: 23px;
   }
   .brand {
     gap: 7px;
+    width: auto;
   }
   .brand-name {
-    font-size: 24px;
-    line-height: 21px;
+    display: none;
   }
   .brand-name small {
     font-size: 6px;

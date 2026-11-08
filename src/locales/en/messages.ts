@@ -389,6 +389,7 @@ export const en = {
     'Select another part while staying in Connect mode and choose its terminal to complete the wire.',
 
   brandTagline: 'YOUR ELECTRONICS WORKBENCH',
+  brandSubtitle: 'ELECTRONICS',
   projectDefault: 'My first laboratory',
   projectName: 'Project name',
   localProject: 'Local project',
@@ -466,7 +467,7 @@ export const en = {
   zoomOut: 'Zoom out',
   fit: 'Fit desk to screen',
   grid: 'Toggle grid',
-  help: "Mesa Lab user guide",
+  help: "LosProfesParaVos user guide",
   language: 'Language',
   canvasLabel:
     'Electronics workbench: drag the background to pan and use two fingers or the wheel to zoom.',
@@ -504,7 +505,7 @@ export const en = {
   consoleEmpty: "Electrical diagnostics",
   localOnly: 'Everything stays in your browser',
   previewVersion: "Virtual IoT foundation",
-  helpTitle: "How to use Mesa Lab",
+  helpTitle: "How to use LosProfesParaVos",
   helpIntro: "Explore electronics and Arduino programming: build a circuit, run its program and observe how it responds to the wiring.",
   helpGestures: 'Navigate your desk',
   done: 'Got it',
