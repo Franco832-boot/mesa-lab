@@ -33,10 +33,13 @@ for (const locale of ['es', 'en']) for (const width of [1440, 390]) {
     page.on('request', request => { if (!request.url().startsWith(baseURL) && !request.url().startsWith('blob:')) network.push(request.url()); });
     await example(page, locale);
     assert.equal(await page.getByTestId('tool-tab-iot').count(), 0);
-    await page.getByTestId('esp-code-tab-main').click();
+    await page.getByTestId('esp-code-tab-wifi').click();
+    await page.locator('#tool-panel-code').getByRole('tab', { name: 'wifi.cpp', exact: true }).click();
     const sourceEditor = page.locator('#tool-panel-code').getByTestId('board-code-editor');
     const original = await sourceEditor.inputValue();
-    await sourceEditor.fill(original.replace('ssid = "MiCasa"', 'ssid = "Invented ' + locale + width + '"').replace('password = "carlos"', 'password = "free choice ' + width + '"'));
+    assert.match(original, /const char\* ssid = "MiCasa"/);
+    assert.match(original, /const char\* password = "carlos"/);
+    assert.equal(await page.getByTestId('esp-wifi-environment').count(), 0);
     await page.getByTestId('esp-code-tab-web').click();
     assert.equal(await page.getByTestId('esp-preview-open').isDisabled(), true);
     await page.getByTestId('simulation-start').click();
@@ -44,10 +47,10 @@ for (const locale of ['es', 'en']) for (const width of [1440, 390]) {
     const frame = page.frameLocator('[data-testid="esp-web-frame"]');
     const state = frame.locator('#status');
     const serial = page.locator('[data-testid="serial-output"][data-component-id="esp"]');
-    await serial.getByText('Iniciando ESP8266...', { exact: false }).waitFor();
+    await serial.getByText('IP: 192.0.2.10', { exact: false }).waitFor();
     assert.match(await serial.textContent(), /IP: 192\.0\.2\.10/);
-    assert.equal((await serial.textContent()).includes('free choice'), false);
-    assert.equal(await page.getByTestId('esp-wifi-status').getAttribute('data-state'), '3');
+    assert.equal((await serial.textContent()).includes('carlos'), false);
+    await page.waitForFunction(() => document.querySelector('[data-testid="esp-wifi-status"]')?.getAttribute('data-state') === '3');
     await page.evaluate(() => { window.addEventListener('message', event => { if (event.data?.type === 'preview-http') window.mesaTestToken = event.data.token; }); });
     await state.getByText(locale === 'es' ? 'D5: apagado' : 'D5: OFF', { exact: true }).waitFor();
     assert.equal(await frame.locator('body').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(244, 240, 233)', 'Served CSS loaded');
@@ -71,11 +74,12 @@ for (const locale of ['es', 'en']) for (const width of [1440, 390]) {
     assert.equal(await page.getByTestId('esp-web-frame').count(), 0);
     await save(page, locale);
     const saved = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem('persist:mesa.project')).document));
-    assert.equal(saved.programs[0].files.length, 8);
-    assert.equal(saved.programs[0].files.find(file => file.name === 'Funciones.cpp').source.includes('digitalWrite(D5, HIGH)'), true);
+    assert.equal(saved.programs[0].files.length, 10);
+    assert.equal(saved.programs[0].files.find(file => file.name === 'funciones.cpp').source.includes('digitalWrite(D5, HIGH)'), true);
     assert.equal('firmware' in saved, false);
     await page.reload(); await status(page, 'stopped');
-    await openCode(page); await page.getByTestId('esp-code-tab-html').click();
+    await openCode(page);
+    await page.getByTestId('esp-code-tab-html').click();
     await page.getByTestId('simulation-start').click(); await page.getByTestId('esp-preview-open').click();
     await state.getByText(locale === 'es' ? 'D5: apagado' : 'D5: OFF', { exact: true }).waitFor();
     await frame.locator('body').evaluate((_, token) => parent.postMessage({type:'preview-http', token, id:9999, path:'/led/on'}, '*'), oldToken);
@@ -114,7 +118,8 @@ for (const [ssid, password] of [['', 'anything'], ['anything', ''], ['   ', 'any
   test(`empty emulated credentials disable the server and preview: ${JSON.stringify([ssid,password])}`, { timeout: 60000 }, async (t) => {
     const page = await openFixture(harness.browser, t, project([]));
     await example(page, 'en');
-    await page.getByTestId('esp-code-tab-main').click();
+    await page.getByTestId('esp-code-tab-wifi').click();
+    await page.locator('#tool-panel-code').getByRole('tab', { name: 'wifi.cpp', exact: true }).click();
     const editor = page.locator('#tool-panel-code').getByTestId('board-code-editor');
     await editor.fill((await editor.inputValue()).replace('ssid = "MiCasa"', 'ssid = ' + JSON.stringify(ssid)).replace('password = "carlos"', 'password = ' + JSON.stringify(password)));
     await page.getByTestId('esp-code-tab-web').click();
@@ -133,10 +138,10 @@ test('a connected ESP still requires firmware server start; GET forms and links 
   await page.getByTestId('esp-code-tab-main').click();
   const editor = page.locator('#tool-panel-code').getByTestId('board-code-editor');
   const main = await editor.inputValue();
-  await editor.fill(main.replace('iniciarServidor();', ''));
+  await editor.fill(main.replace('iniciarServidor();', 'delay(0);'));
   await page.getByTestId('esp-code-tab-web').click();
   await page.getByTestId('simulation-start').click();
-  assert.equal(await page.getByTestId('esp-wifi-status').getAttribute('data-state'), '3');
+  await page.waitForFunction(() => document.querySelector('[data-testid="esp-wifi-status"]')?.getAttribute('data-state') === '3');
   assert.equal(await page.getByTestId('esp-preview-open').isDisabled(), true);
   assert.equal(await page.getByTestId('esp-web-frame').count(), 0);
   await page.getByTestId('simulation-stop').click();

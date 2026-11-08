@@ -21,7 +21,6 @@ export function CodeWorkspace({
   status,
   saveStatus = 'saved',
   onClose,
-  onOpenMonitor,
   web,
   onRevealWeb,
 }: {
@@ -34,7 +33,6 @@ export function CodeWorkspace({
   status?: ReactNode;
   saveStatus?: 'saving' | 'saved' | 'error';
   onClose?: () => void;
-  onOpenMonitor?: () => void;
   web?: EspWebRuntime | undefined;
   onRevealWeb?: (() => void) | undefined;
 }) {
@@ -128,7 +126,6 @@ export function CodeWorkspace({
             web={web}
             onRevealWeb={onRevealWeb}
             openedSessions={openedSessions.current}
-            onOpenMonitor={onOpenMonitor}
           /> : <CodeFilesEditor
             key={activeBoard.id}
             board={activeBoard}
@@ -141,7 +138,7 @@ export function CodeWorkspace({
         </div>
       )}
       {status && <div className="code-network-status">{status}</div>}
-      <p className="code-editing-note">{t('boardCodeExecutionNote')}</p>
+      {activeBoard?.kind !== 'esp8266' && <p className="code-editing-note">{t('boardCodeExecutionNote')}</p>}
     </section>
   );
 }

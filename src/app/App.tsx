@@ -756,11 +756,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                   request: (path) => simulation.requestFirmwareHttp(boardContext.activeBoard?.id ?? '', path, simulation.firmware[boardContext.activeBoard?.id ?? '']?.session),
                 } : undefined}
                 onRevealWeb={() => { setToolTab('code'); setLibraryOpen(true); setWebRevealSequence((value) => value + 1); }}
-                onOpenMonitor={() => {
-                  setConsoleOpen(true);
-                  const id = boardContext.activeBoard?.id;
-                  requestAnimationFrame(() => document.getElementById(`serial-${encodeURIComponent(id ?? '')}`)?.focus());
-                }}
                 boards={boardContext.boards}
                 activeBoard={boardContext.activeBoard}
                 program={project.programs.find(

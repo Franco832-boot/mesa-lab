@@ -107,16 +107,16 @@ for (const locale of ['es', 'en']) for (const width of [1440, 390]) {
   });
 }
 
-test('ESP serial mini-tab observes the existing per-board runtime and clears on Stop', async (t) => {
+test('ESP uses only the bottom per-board Serial monitor and clears on Stop', async (t) => {
   const doc = fixture();
   doc.programs = ['uno', 'esp', 'other'].map((id) => ({ componentId: id, language: 'arduino-cpp', execution: 'unavailable',
     source: `void setup(){Serial.begin(9600);Serial.println("${id}");}void loop(){delay(1000);}` }));
   const page = await openFixture(harness.browser, t, doc);
   await openCode(page); await boardTab(page, 'esp').click();
   await page.getByTestId('simulation-start').click();
-  await code(page).getByTestId('esp-code-tab-serial').click();
+  assert.equal(await code(page).getByTestId('esp-code-tab-serial').count(), 0);
   assert.equal((await page.locator('[data-testid="serial-output"][data-component-id="esp"]').textContent()).trim(), 'esp');
-  await boardTab(page, 'other').click(); await code(page).getByTestId('esp-code-tab-serial').click();
+  await boardTab(page, 'other').click();
   assert.equal((await page.locator('[data-testid="serial-output"][data-component-id="other"]').textContent()).trim(), 'other');
   assert.equal(await code(page).getByTestId('serial-output').count(), 0, 'The editor never duplicates the bottom monitor');
   await page.locator('#serial-other').getByTestId('serial-clear').click();

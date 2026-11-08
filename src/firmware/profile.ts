@@ -1,3 +1,4 @@
+import { WL_CONNECTED, WL_CONNECT_FAILED, WL_DISCONNECTED, WL_IDLE_STATUS, WIFI_STA } from './wifi';
 import type { BoardKind } from '../model/types';
 import { gpioPins } from '../sim/gpio';
 import type { GpioCall } from './ast';
@@ -10,7 +11,7 @@ export function constantValue(token: string, board: BoardKind, at: SourceSpan): 
   const number = integerLiteral(token, board, at);
   if (number) return number;
   if (board === 'esp8266') {
-    const statuses: Readonly<Record<string, number>> = { WL_CONNECTED: 3, WL_CONNECT_FAILED: 4, WL_DISCONNECTED: 6 };
+    const statuses: Readonly<Record<string, number>> = { WL_CONNECTED, WL_CONNECT_FAILED, WL_DISCONNECTED, WL_IDLE_STATUS, WIFI_STA };
     if (Object.hasOwn(statuses, token)) return { type: 'int', value: statuses[token] ?? 6 };
   }
   if (token === 'DHT11') return { type: 'int', value: 11 };

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { component, project, wire } from './fixtures.mjs';
 export function webFixture({ pin = 'D5', script, html, css, open = false } = {}) {
-  const names = ['main.ino','Funciones.h','Funciones.cpp','Servidor.h','Servidor.cpp','index.html','style.css','app.js'];
+  const names = ['main.ino','wifi.h','wifi.cpp','funciones.h','funciones.cpp','servidor.h','servidor.cpp','index.html','style.css','app.js'];
   const files = names.map(name => ({ name, source: readFileSync(new URL(`../../examples/esp8266/web-led/${name}`, import.meta.url), 'utf8').replaceAll('D5', pin) }));
   for (const [name, content] of [['index.html',html],['app.js',script],['style.css',css]]) {
     if (content !== undefined) files.find(file => file.name === name).source = content;

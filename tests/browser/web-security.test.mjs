@@ -149,15 +149,15 @@ test('request floods and over-size pages are bounded without stopping the firmwa
 });
 
 test('a dropped virtual response times out and Stop cancels the former page', {timeout:60000},async t=>{
-  const page=await openFixture(harness.browser,t,webFixture());await networkGuard(page,t);const frame=await startWeb(page);
+  const page=await openFixture(harness.browser,t,webFixture());await networkGuard(page,t);
+  // Register before React's transport listener so delivery is actually dropped.
+  await page.addInitScript(()=>{if(window!==top)return;window.dropBridge=false;window.dropped=[];window.addEventListener('message',event=>{if(window.dropBridge && event.data?.type==='preview-http'){window.dropped.push(event.data.path);event.stopImmediatePropagation();}},true);});
+  await page.reload();const frame=await startWeb(page);
   await frame.locator('#status').getByText('D5: OFF',{exact:true}).waitFor();
-  // Deliberately drop only transport delivery, without mocking firmware or GPIO results.
-  await page.evaluate(()=>{window.dropped=[];window.bridgeEvents=[];window.addEventListener('message',event=>{window.bridgeEvents.push({type:event.data?.type,text:event.data?.text});if(event.data?.type==='preview-http'){window.dropped.push(event.data.path);event.stopImmediatePropagation();}},true);});
+  await page.evaluate(()=>{window.dropBridge=true;});
   await frame.locator('#on').click();
   await page.waitForFunction(()=>window.dropped?.includes('/led/on'));
   await brightness(page,'led',false);
-  await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,3500)));
-  t.diagnostic(JSON.stringify(await page.evaluate(()=>({dropped:window.dropped,events:window.bridgeEvents}))));
   await page.getByTestId('esp-web-error').waitFor();
   assert.match(await page.getByTestId('esp-web-error').textContent(),/did not respond/);
   await brightness(page,'led',false);assert.equal(await page.getByTestId('esp-web-frame').count(),0);

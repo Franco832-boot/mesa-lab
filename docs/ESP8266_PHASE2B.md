@@ -1,5 +1,31 @@
 # ESP8266 execution, emulated WiFi and web GPIO — Phase 2B
 
+## Current closeout status — 2026-11-08
+
+Testing stopped at the user's request. Do not rerun tests without asking first. The final editor cleanup is UI-only: six sections (Main, WiFi, Functions, Web server, HTML, Web view), no Serial mini-tab/shortcut, and no redundant interpreter/library notice. The bottom Serial monitor and firmware/network/HTTP/electrical behavior were not changed by this cleanup. Existing UI assertions were updated without changing timeouts or suppressing failures; those edits have not been executed.
+
+The implementation now includes a distinct Web view, once-per-run automatic reveal, virtual address/path controls, refresh/close/reopen, bounded HTML/CSS/JS resources, stricter CSP/message validation and a Worker watchdog. The example has ten files: Main coordinates `Funciones`, `wifi` and `Servidor`; `wifi.cpp` owns fictional credentials and timeout handling. Zero-argument bool functions and cooperative while waits run in the existing VM. The transient access-point configuration is independent of firmware credentials and requires an exact match; default fictional values are MiCasa/carlos with a 300 ms virtual connection delay. The connection has disconnected/connecting/connected/error states. Configuration survives Stop, not reload/project replacement, and has no new persisted schema.
+
+Available evidence, without another test execution:
+
+| Scope | Existing result | Qualification |
+| --- | --- | --- |
+| Original Phase 2B Chrome selection | 24/24 passed | Earlier baseline, before subsequent Web view/WiFi/UI changes. Detailed historical results below. |
+| Strict TypeScript | Passed after the WiFi/configuration integration | Before the final UI-only cleanup. |
+| Full Vitest with two workers | 548/548, 62 files, 21.91 s | Includes linked bool functions, virtual timing, credential mismatch, reconnect, HTTP gating and electrical tests; before final UI-only cleanup. |
+| Focused later Chrome selection | 5/5, 45.08 s | Automatic Web view in ES/EN at 1440/390 px, actual page→LED, CSS, close/refresh/restart and dropped-response timeout. Before final UI-only cleanup. |
+| Expanded web/security checks | Earlier 16/18 | Two test-design failures: sequential request flood did not deterministically exceed its rate; response-drop listener was installed after delivery. Flood was subsequently checked in isolation; corrected drop test passed in the five-case run. The entire expanded selection has no final completed result. |
+| Latest expanded Chrome command | Interrupted; no completion report available | Not counted as passing or retried. New `esp-wifi` browser cases are authored, not verified. |
+| Production build | Original baseline passed | No completed build recorded after later Web/WiFi changes. No new build or tests run for the final cleanup. |
+
+The existing ProjectLibrary test has intermittently exceeded its unchanged five-second timeout under concurrent load. It passed in the recorded bounded-worker run. This remains a documented stability concern; no retry cycle or timeout increase is authorized.
+
+Pending before claiming the latest state fully verified: one approved, finite validation of the new WiFi browser scenarios and complete hardened-security matrix, current TypeScript/build and final UI assertions. Do not treat the historical 24 cases as coverage of later changes. Security has no absolute guarantee: native JS allocations/browser rendering have no hard per-project heap quota. See [the current security model and residual risks](ESP8266_WEB_SECURITY.md).
+
+The sections below retain the **original Phase 2B baseline** for traceability. Its immediate/any-nonblank credential model, eight-file layout and Serial/HTML navigation descriptions are historical and superseded by the current status above.
+
+## Original Phase 2B baseline (historical)
+
 ## Try the complete example
 
 Open **ESP8266 — LED control through a web server** in Projects. In Code → Main, change `ssid` and `password` to any invented nonblank strings. Start simulation. The firmware prints its own connection messages and fictitious IP in the **existing bottom Serial monitor**. Open Code → HTML: the preview opens automatically once the firmware has connected WiFi, started the server and executed `handleClient()`. Buttons send local HTTP requests through C++ handlers to D5/GPIO14 and the ordinary electrical solver. Close/reopen the preview with its own controls. Pause and Stop remove it; restart runs setup again with D5 LOW.

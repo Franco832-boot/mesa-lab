@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "Funciones.h"
+#include "funciones.h"
 
 void iniciarLed() {
   pinMode(D5, OUTPUT);

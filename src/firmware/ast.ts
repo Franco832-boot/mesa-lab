@@ -33,14 +33,15 @@ export interface CallStatement {
 }
 export interface ObjectDeclaration { kind: 'construct'; className: LibraryClass; name: string; args: readonly Expression[]; at: SourceSpan }
 export type Statement = CallStatement | Declaration | TextDeclaration
-  | { kind: 'return'; at: SourceSpan }
+  | { kind: 'return'; value: Expression | null; at: SourceSpan }
   | { kind: 'block'; body: readonly Statement[]; at: SourceSpan }
   | { kind: 'if'; condition: Expression; then: Statement; otherwise: Statement | null; at: SourceSpan }
+  | { kind: 'while'; condition: Expression; body: Statement; at: SourceSpan }
   | { kind: 'for'; initializer: Declaration | Expression | null; condition: Expression | null;
       update: Expression | null; body: Statement; at: SourceSpan }
   | { kind: 'expression'; value: Expression; at: SourceSpan }
   | { kind: 'empty'; at: SourceSpan };
-export interface SketchFunction { name: string; body: readonly Statement[]; at: SourceSpan }
+export interface SketchFunction { name: string; result: 'void' | 'bool'; body: readonly Statement[]; at: SourceSpan }
 export interface SketchAst {
   functions: readonly SketchFunction[];
   globals: readonly (Declaration | ObjectDeclaration | TextDeclaration)[];

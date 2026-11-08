@@ -55,12 +55,15 @@ describe('board code workspace', () => {
     expect(markup).not.toContain('<textarea');
     expect(markup).toContain('data-testid="board-context-header"');
   });
-  it('offers seven ESP sections with honest scope notes and leaves UNO file navigation intact', () => {
+  it('offers six ESP sections without a redundant Serial section or scope notes and leaves UNO navigation intact', () => {
     const espMarkup = render(esp, program('esp', '// main')).markup;
-    expect(espMarkup.match(/data-testid="esp-code-tab-/g)).toHaveLength(7);
-    for (const label of ['Principal', 'WiFi', 'Funciones', 'Servidor web', 'HTML', 'Vista web', 'Monitor serie']) expect(espMarkup).toContain(label);
-    expect(espMarkup).toContain('Includes locales y funciones void sin parámetros');
-    expect(espMarkup).toContain('WiFi, ESP8266WebServer y LittleFS simulados');
+    expect(espMarkup.match(/data-testid="esp-code-tab-/g)).toHaveLength(6);
+    for (const label of ['Principal', 'WiFi', 'Funciones', 'Servidor web', 'HTML', 'Vista web']) expect(espMarkup).toContain(label);
+    expect(espMarkup).not.toContain('Monitor serie');
+    expect(espMarkup).not.toContain('Includes locales');
+    expect(espMarkup).not.toContain('WiFi, ESP8266WebServer y LittleFS simulados');
+    expect(espMarkup).not.toContain('esp-wifi-environment');
+    expect(espMarkup).not.toContain('esp-ap-');
     expect(render(uno, program('uno', '// UNO')).markup).not.toContain('esp-code-tab-');
   });
   it('explains saved main.ino execution and the supported GPIO subset without adding editor controls', () => {

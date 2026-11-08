@@ -42,7 +42,7 @@ describe('project-local linking through the Arduino VM', () => {
 describe('ESP8266WebServer adapter', () => {
   it('serves only registered resources and calls actual handlers with persistent D5 latch state', () => {
     const files = espWebExampleFiles();
-    let execution = advanceArduino(initialExecution(compileProjectFiles(files, 'esp8266')), 0).execution;
+    let execution = advanceArduino(initialExecution(compileProjectFiles(files, 'esp8266')), 400).execution;
     for (const [path, contentType] of [['/', 'text/html'], ['/style.css', 'text/css'], ['/app.js', 'text/javascript']]) {
       expect(requestFirmwareHttp(execution, files, path ?? '').response).toMatchObject({ status: 200, contentType });
     }
@@ -68,7 +68,7 @@ void report() {
 }
 void power() { digitalWrite(D2,HIGH); report(); }
 void setup() {
-  WiFi.begin("Any network", "Any password");
+  WiFi.begin("MiCasa", "carlos");
   int count = 99;
   pinMode(D2,OUTPUT);
   if (true) device.on("/custom/power",HTTP_GET,power);
@@ -78,7 +78,7 @@ void setup() {
 }
 void loop(){ device.handleClient(); }`;
     const files = [{ name: 'main.ino', source }];
-    let execution = advanceArduino(initialExecution(compileProjectFiles(files, 'esp8266')), 0).execution;
+    let execution = advanceArduino(initialExecution(compileProjectFiles(files, 'esp8266')), 400).execution;
     expect(requestFirmwareHttp(execution, files, '/not-registered').response.status).toBe(404);
     const result = requestFirmwareHttp(execution, files, '/custom/power');
     execution = result.execution;
@@ -92,8 +92,8 @@ void loop(){ device.handleClient(); }`;
     const files = espWebExampleFiles();
     const initial = initialExecution(compileProjectFiles(files, 'esp8266'));
     expect(requestFirmwareHttp(initial, files, '/').response.status).toBe(503);
-    const waiting = files.map((file) => file.name === 'Servidor.cpp' ? { ...file, source: file.source.replace('encenderLed();', 'encenderLed(); delay(1);') } : file);
-    const execution = advanceArduino(initialExecution(compileProjectFiles(waiting, 'esp8266')), 0).execution;
+    const waiting = files.map((file) => file.name === 'servidor.cpp' ? { ...file, source: file.source.replace('encenderLed();', 'encenderLed(); delay(1);') } : file);
+    const execution = advanceArduino(initialExecution(compileProjectFiles(waiting, 'esp8266')), 400).execution;
     expect(() => requestFirmwareHttp(execution, waiting, '/led/on')).toThrowError(expect.objectContaining({ code: 'http-handler-limit' }));
     expect(execution.levels.D5).toBe('LOW');
   });

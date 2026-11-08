@@ -3,9 +3,9 @@ import { selectedSourceFile, sourceFiles } from './programFiles';
 import type { ProgramFileAction } from './programFiles';
 
 /** Editor navigation conventions only; these names do not create compiler semantics. */
-export const ESP_CODE_SECTIONS = ['main', 'wifi', 'functions', 'server', 'html', 'web', 'serial'] as const;
+export const ESP_CODE_SECTIONS = ['main', 'wifi', 'functions', 'server', 'html', 'web'] as const;
 export type EspCodeSection = typeof ESP_CODE_SECTIONS[number];
-export type EspFileSection = Exclude<EspCodeSection, 'serial' | 'web'>;
+export type EspFileSection = Exclude<EspCodeSection, 'web'>;
 const sectionFiles: Readonly<Record<EspFileSection, readonly string[]>> = {
   main: ['main.ino'], wifi: ['wifi.h', 'wifi.cpp'], functions: ['functions.h', 'functions.cpp'],
   server: ['server.h', 'server.cpp'], html: ['index.html'],

@@ -23,13 +23,14 @@ type Operation =
   | { op: 'text-push'; text: string }
   | { op: 'text-load'; name: string }
   | { op: 'text-declare'; name: string; text: string }
-  | { op: 'wifi'; name: 'begin' | 'status' | 'disconnect' }
+  | { op: 'wifi'; name: 'begin' | 'status' | 'disconnect' | 'mode' }
   | { op: 'wifi-ip' }
   | { op: 'serial-value-text'; newline: boolean }
   | { op: 'web-file'; receiver: string; file: string; contentType: string }
 
   | { op: 'invoke'; name: string }
-  | { op: 'function-return' }
+  | { op: 'function-return'; value: boolean }
+  | { op: 'missing-return' | 'while-yield' }
   | { op: 'digital-read' }
   | { op: 'web-call'; receiver: string; name: 'begin' | 'handleClient' }
   | { op: 'fs-begin' }
@@ -124,7 +125,8 @@ class Compiler {
   private code: Instruction[] = [];
   private scopes: Map<string, Binding>[] = [new Map()];
   private objects = new Map<string, LibraryClass>([['Serial', 'Serial'], ['Wire', 'Wire'], ['LittleFS', 'LittleFS'], ['WiFi', 'WiFi']]);
-  private functions = new Set<string>();
+  private functions = new Map<string, 'void' | 'bool'>();
+  private functionResult: 'void' | 'bool' = 'void';
   private inFunction = false;
   private headers: readonly string[] = [];
   constructor(private readonly board: BoardKind) {}
@@ -194,10 +196,11 @@ class Compiler {
           this.expression(value.args[0] ?? fail('type-error', at));
           this.emit({ op: 'digital-read' }, at); return;
         }
-        if (!allowVoid || value.args.length !== 0) return fail('unsupported-syntax', at);
+        if (value.args.length !== 0 || (!allowVoid && this.functions.get(value.name) === 'void')) return fail('unsupported-syntax', at);
         if (!this.functions.has(value.name)) return fail('name-error', at);
         this.emit({ op: 'invoke', name: value.name }, at);
-        this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at); return;
+        if (this.functions.get(value.name) === 'void') this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        return;
       }
       case 'string': return fail('type-error', at);
       case 'isnan': this.expression(value.value); this.emit({ op: 'isnan' }, at); return;
@@ -210,9 +213,10 @@ class Compiler {
         if (type === 'WiFi') {
           if (this.board !== 'esp8266' || !this.headers.includes('ESP8266WiFi.h') || value.name === 'localIP') return fail('type-error', at);
           if (value.name === 'begin') for (const arg of value.args) this.textExpression(arg);
-          if (value.name !== 'begin' && value.name !== 'status' && value.name !== 'disconnect') return fail('unsupported-syntax', at);
+          if (value.name === 'mode') this.expression(value.args[0] ?? fail('type-error', at));
+          if (value.name !== 'begin' && value.name !== 'status' && value.name !== 'disconnect' && value.name !== 'mode') return fail('unsupported-syntax', at);
           this.emit({ op: 'wifi', name: value.name }, at);
-          if (value.name !== 'status') this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+          if (value.name !== 'status' && value.name !== 'mode') this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
         } else if (type === 'ESP8266WebServer' || type === 'LittleFS') {
           if (this.board !== 'esp8266' || !this.headers.includes(type === 'LittleFS' ? 'LittleFS.h' : 'ESP8266WebServer.h')) return fail('unsupported-syntax', at);
           const text = (index: number) => {
@@ -222,7 +226,7 @@ class Compiler {
           if (type === 'LittleFS') this.emit({ op: 'fs-begin' }, at);
           else if (value.name === 'on') {
             const method = value.args.length === 3 ? value.args[1] : null, handler = value.args[value.args.length - 1];
-            if ((method && (method.kind !== 'atom' || method.token !== 'HTTP_GET')) || handler?.kind !== 'atom' || !this.functions.has(handler.token)) return fail('unsupported-syntax', at);
+            if ((method && (method.kind !== 'atom' || method.token !== 'HTTP_GET')) || handler?.kind !== 'atom' || this.functions.get(handler.token) !== 'void') return fail('unsupported-syntax', at);
             this.emit({ op: 'web-route', receiver: value.receiver, path: text(0), handler: handler.token }, at);
           } else if (value.name === 'serveStatic') {
             const fs = value.args[1];
@@ -384,6 +388,15 @@ class Compiler {
   }
   private statement(value: Statement): void {
     switch (value.kind) {
+      case 'while': {
+        const conditionPc = this.code.length;
+        this.expression(value.condition);
+        const exit = this.emit({ op: 'branch', when: false, target: 0 }, value.at);
+        this.scoped([value.body], value.body.at);
+        this.emit({ op: 'while-yield' }, value.at);
+        this.emit({ op: 'jump', target: conditionPc }, value.at);
+        this.patch(exit, this.code.length); return;
+      }
       case 'for': {
         this.scopes.push(new Map());
         this.emit({ op: 'enter' }, value.at);
@@ -409,7 +422,17 @@ class Compiler {
         this.scopes.pop();
         return;
       }
-      case 'return': this.emit({ op: this.inFunction ? 'function-return' : 'return' }, value.at); return;
+      case 'return': {
+        if (this.inFunction && this.functionResult === 'bool') {
+          if (!value.value) return fail('type-error', value.at);
+          this.expression(value.value); this.emit({ op: 'function-return', value: true }, value.at);
+        } else {
+          if (value.value) return fail('type-error', value.at);
+          if (this.inFunction) this.emit({ op: 'function-return', value: false }, value.at);
+          else this.emit({ op: 'return' }, value.at);
+        }
+        return;
+      }
       case 'empty':
         return;
       case 'block':
@@ -446,7 +469,7 @@ class Compiler {
   compile(ast: SketchAst): UnoProgram {
     this.headers = ast.headers;
     if (this.board !== 'esp8266' && ast.headers.some((header) => ['ESP8266WiFi.h', 'ESP8266WebServer.h', 'LittleFS.h'].includes(header))) fail('unsupported-syntax');
-    this.functions = new Set(ast.functions.map((fn) => fn.name));
+    this.functions = new Map(ast.functions.map((fn) => [fn.name, fn.result]));
     for (const fn of ast.functions) if (reserved.has(fn.name) || this.objects.has(fn.name) || constantValue(fn.name, this.board, fn.at)) fail('name-error', fn.at);
     const at = { offset: 0, line: 1, column: 1 };
     for (const declaration of ast.globals) {
@@ -463,9 +486,11 @@ class Compiler {
     this.inFunction = true;
     for (const fn of ast.functions) {
       if (this.scopes[0]?.has(fn.name) || this.objects.has(fn.name)) fail('name-error', fn.at);
+      this.functionResult = fn.result;
       functionPcs.set(fn.name, this.code.length);
       this.scoped(fn.body, fn.at);
-      this.emit({ op: 'function-return' }, fn.at);
+      if (fn.result === 'void') this.emit({ op: 'function-return', value: false }, fn.at);
+      else this.emit({ op: 'missing-return' }, fn.at);
     }
     return { ...ast, board: this.board, code: this.code, loopPc, functionPcs };
   }

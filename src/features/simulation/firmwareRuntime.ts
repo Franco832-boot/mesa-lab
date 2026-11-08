@@ -1,3 +1,4 @@
+import type { VirtualWifiNetwork } from '../../firmware/wifi';
 import type { SerialState } from '../../firmware/serial';
 import { compileProjectFiles } from '../../firmware/projectCompiler';
 import { initialExecution } from '../../firmware/machine';
@@ -26,7 +27,7 @@ import { observeDht11 } from '../../sim/dht11';
 import type { DhtObservation } from '../../model/dht11';
 
 interface CircuitHost extends FirmwareHost { currentInputs(): SimulationInputs }
-function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, boardId: string): CircuitHost {
+function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, boardId: string, wifiNetwork?: VirtualWifiNetwork): CircuitHost {
   let inputs = initialInputs;
   let signature: string | null = null, observation: DhtObservation | null = null;
   const targets = new Map<string, string | null>();
@@ -36,7 +37,7 @@ function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, b
     for (const event of pendingGpio) gpio[pinKey(boardId, event.pinId)] = event.state;
     return { ...inputs, gpio };
   };
-  return { currentInputs: () => inputs, readDigital: (pinId, pendingGpio) => {
+  return { ...(wifiNetwork ? { wifiNetwork } : {}), currentInputs: () => inputs, readDigital: (pinId, pendingGpio) => {
     const reading = evaluateCircuit(project, applyPending(pendingGpio)).pins[pinKey(boardId, pinId)];
     return reading?.logic === 'HIGH' ? 1 : reading?.logic === 'LOW' ? 0 : null;
   }, observeDht: (pinId, _timeUs, pendingGpio) => {
@@ -62,6 +63,7 @@ function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, b
 
 export interface FirmwareSession { readonly kind: 'firmware-session' }
 export interface BoardExecution {
+  wifiNetwork?: VirtualWifiNetwork;
   session?: FirmwareSession;
   serial?: SerialState;
   files?: readonly SourceFile[];
@@ -75,7 +77,7 @@ export type FirmwareState = Readonly<Record<string, BoardExecution>>;
 export type FirmwareEvent =
   | { type: 'firmware-clear-serial'; componentId: string }
   | { type: 'firmware-http'; componentId: string; path: string; session?: FirmwareSession }
-  | { type: 'firmware-run'; componentId: string; source: string }
+  | { type: 'firmware-run'; componentId: string; source: string; wifiNetwork?: VirtualWifiNetwork }
   | { type: 'firmware-stop'; componentId: string }
   | { type: 'firmware-advance'; elapsedMs: number };
 
@@ -120,7 +122,7 @@ export function transitionFirmware(
       if (previous.status !== 'running' || !instance.execution || instance.error || (event.session && event.session !== instance.session)) {
         next = { ...instance, httpResponse: { status: 503, contentType: 'text/plain', body: '503' } };
       } else {
-        const host = circuitHost(project, inputs, event.componentId);
+        const host = circuitHost(project, inputs, event.componentId, instance.wifiNetwork);
         const result = requestFirmwareHttp(instance.execution, instance.files ?? [], event.path, host);
         const gpio = { ...host.currentInputs().gpio };
         for (const output of result.gpio) gpio[pinKey(event.componentId, output.pinId)] = output.state;
@@ -152,7 +154,7 @@ export function transitionFirmware(
     if (!board || (board.kind !== 'arduino-uno' && board.kind !== 'esp8266')) return previous;
     const inputs = clearBoardInputs(previous.inputs, project, board.id);
     try {
-      const host = circuitHost(project, inputs, board.id);
+      const host = circuitHost(project, inputs, board.id, event.wifiNetwork);
       const program = project.programs.find((item) => item.componentId === board.id);
       const files = board.kind === 'esp8266' && program?.files
         ? program.files.map((file) => ({ ...file, source: file.name === 'main.ino' ? event.source : file.source }))
@@ -168,7 +170,7 @@ export function transitionFirmware(
         inputs: nextInputs,
         firmware: {
           ...previous.firmware,
-          [board.id]: { session: { kind: 'firmware-session' }, files, source: event.source, execution: initial.execution, error: null },
+          [board.id]: { ...(event.wifiNetwork ? { wifiNetwork: { ...event.wifiNetwork } } : {}), session: { kind: 'firmware-session' }, files, source: event.source, execution: initial.execution, error: null },
         },
         snapshot: evaluateCircuit(project, nextInputs),
       };
@@ -198,7 +200,7 @@ export function transitionFirmware(
   for (const [id, instance] of Object.entries(previous.firmware)) {
     if (!instance.execution || instance.error) continue;
     try {
-      const host = circuitHost(project, inputs, id);
+      const host = circuitHost(project, inputs, id, instance.wifiNetwork);
       const advanced = advanceArduino(instance.execution, event.elapsedMs, budget, host);
       inputs = host.currentInputs();
       firmware[id] = { ...instance, execution: advanced.execution };

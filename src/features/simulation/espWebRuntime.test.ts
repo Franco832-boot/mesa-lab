@@ -11,9 +11,39 @@ const fixture = () => createExampleProject('esp-web-led', 'Web LED', 'web-test')
 const run = { type: 'firmware-run' as const, componentId: 'esp' };
 const http = (path: string, componentId = 'esp') => ({ type: 'firmware-http' as const, componentId, path });
 describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () => {
+  it.each([
+    { password: 'carlos', connected: true },
+    { password: 'incorrect', connected: false },
+    { password: '', connected: false },
+  ])('reads $password from the real WiFi module without an external configuration', ({ password, connected }) => {
+    const original = fixture();
+    const module = original.programs[0]?.files?.find((file) => file.name === 'wifi.cpp');
+    if (!module) throw new Error('Missing WiFi module');
+    const project = applyEditorCommand(original, { type: 'program-file', id: 'esp', action: {
+      type: 'edit', name: 'wifi.cpp', source: module.source.replace('password = "carlos"', `password = "${password}"`),
+    } });
+    const main = project.programs[0]?.source ?? '';
+    expect(main).not.toMatch(/WiFi\.begin|const char\*/);
+    expect(project.programs[0]?.files?.map((file) => file.name)).toEqual([
+      'main.ino', 'wifi.h', 'wifi.cpp', 'funciones.h', 'funciones.cpp', 'servidor.h', 'servidor.cpp', 'index.html', 'style.css', 'app.js',
+    ]);
+    let state = transitionSimulation(initialSimulation(), { ...run, source: main }, project);
+    expect(state.firmware.esp?.execution?.wifi.status).toBe(0);
+    expect(transitionSimulation(state, http('/'), project).firmware.esp?.httpResponse?.status).toBe(503);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
+    expect(state.firmware.esp?.error).toBeNull();
+    expect(state.firmware.esp?.execution?.wifi).toMatchObject({ status: connected ? 3 : 4, ip: connected ? '192.0.2.10' : null });
+    state = transitionSimulation(state, http('/led/on'), project);
+    expect(state.firmware.esp?.httpResponse?.status).toBe(connected ? 200 : 503);
+    expect(state.snapshot?.components.led?.brightness ?? 0).toBeCloseTo(connected ? ((3.3 - 2) / 270) / .02 : 0, 10);
+    expect(state.firmware.esp?.execution?.serial.output).not.toContain('carlos');
+    expect(module.source).toContain('password = "carlos"');
+    expect(parseProject(serializeProject(project))).toEqual(project);
+  });
   it('calculates current independently and reports state from D5, with stop/pause/reset protection', () => {
     const project = fixture(), before = serializeProject(project);
     let state = transitionSimulation(initialSimulation(), { ...run, source: project.programs[0]?.source ?? '' }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     expect(state.firmware.esp?.error).toBeNull();
     expect(state.snapshot?.components.led?.brightness).toBe(0);
     state = transitionSimulation(state, http('/led/on'), project);
@@ -47,6 +77,7 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
       led.attachments = led.attachments.map((attachment) => ({ ...attachment, pinId: attachment.pinId === 'anode' ? 'cathode' : 'anode' }));
     }
     let state = transitionSimulation(initialSimulation(), { ...run, source: project.programs[0]?.source ?? '' }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     state = transitionSimulation(state, http('/led/on'), project);
     if (fault === 'missing-return') {
       expect(state.firmware.esp?.httpResponse?.status).toBe(200);
@@ -61,21 +92,23 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
     const project = fixture();
     const source = project.programs[0]?.source ?? '';
     let state = transitionSimulation(initialSimulation(), { ...run, source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     const edited = applyEditorCommand(project, { type: 'program-file', id: 'esp', action: { type: 'edit', name: 'style.css', source: 'body{color:red}' } });
     state = transitionSimulation(state, http('/style.css'), edited);
     expect(state.firmware.esp?.httpResponse?.body).not.toBe('body{color:red}');
     state = transitionSimulation(state, { ...run, source }, parseProject(serializeProject(edited)));
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     state = transitionSimulation(state, http('/style.css'), edited);
     expect(state.firmware.esp?.httpResponse?.body).toBe('body{color:red}');
     expect(reconcileSimulationProject(state, simulationProjectStamp(edited), { ...edited, id: 'replacement' })).toEqual(initialSimulation());
   });
   it('undoes and redoes a linked handler edit in the authoritative Redux document', () => {
     const project = fixture();
-    const implementation = project.programs[0]?.files?.find((file) => file.name === 'Funciones.cpp')?.source;
+    const implementation = project.programs[0]?.files?.find((file) => file.name === 'funciones.cpp')?.source;
     if (!implementation) throw new Error('Missing helper');
     const initial = projectReducer(undefined, projectReplaced(project));
     const changed = projectReducer(initial, editorCommandApplied({ type: 'program-file', id: 'esp', action: {
-      type: 'edit', name: 'Funciones.cpp', source: implementation.replace('digitalWrite(D5, HIGH)', 'digitalWrite(D5, LOW)'),
+      type: 'edit', name: 'funciones.cpp', source: implementation.replace('digitalWrite(D5, HIGH)', 'digitalWrite(D5, LOW)'),
     } }));
     const reverted = projectReducer(changed, undoApplied());
     const reapplied = projectReducer(reverted, redoApplied());
@@ -84,6 +117,7 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
     for (const [document, expected] of [[reverted.document, 'ON'], [reapplied.document, 'OFF']] as const) {
       const saved = parseProject(serializeProject(document));
       let state = transitionSimulation(initialSimulation(), { ...run, source: saved.programs[0]?.source ?? '' }, saved);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, saved);
       state = transitionSimulation(state, http('/led/on'), saved);
       expect(state.firmware.esp?.httpResponse?.body).toBe(expected);
     }
@@ -92,6 +126,7 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
     const project = fixture();
     project.wires.push({ id: 'grounded-d5', from: { componentId: 'esp', pinId: 'D5' }, to: { componentId: 'esp', pinId: 'GND' }, color: '#525b69', waypoints: [] });
     let state = transitionSimulation(initialSimulation(), { ...run, source: project.programs[0]?.source ?? '' }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     state = transitionSimulation(state, http('/led/on'), project);
     expect(state.firmware.esp?.execution?.levels.D5).toBe('HIGH');
     expect(state.firmware.esp?.httpResponse?.body).toBe('OFF');
@@ -102,10 +137,12 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
   it('rejects the previous execution session even after the same board is restarted', () => {
     const project = fixture(), source = project.programs[0]?.source ?? '';
     let state = transitionSimulation(initialSimulation(), { ...run, source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     const session = state.firmware.esp?.session;
     if (!session) throw new Error('Missing session');
     state = transitionSimulation(state, { type: 'stop' }, project);
     state = transitionSimulation(state, { ...run, source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     const current = state.firmware.esp?.session;
     expect(current).not.toBe(session);
     state = transitionSimulation(state, { ...http('/led/on'), session }, project);
@@ -118,6 +155,7 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
   it('clears the one serial output without rerunning setup or disconnecting WiFi/server', () => {
     const project = fixture(), source = project.programs[0]?.source ?? '';
     let state = transitionSimulation(initialSimulation(), { ...run, source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     expect(state.firmware.esp?.execution?.serial.output).toContain('WiFi conectado');
     const wifi = state.firmware.esp?.execution?.wifi, session = state.firmware.esp?.session;
     state = transitionSimulation(state, { type: 'firmware-clear-serial', componentId: 'esp' }, project);
@@ -128,6 +166,7 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
     expect(state.snapshot?.components.led?.brightness).toBeGreaterThan(0);
     state = transitionSimulation(state, { type: 'stop' }, project);
     state = transitionSimulation(state, { ...run, source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     expect(state.firmware.esp?.execution?.serial.output).toContain('Iniciando ESP8266...');
     expect(state.firmware.esp?.execution?.wifi.status).toBe(3);
   });
@@ -139,6 +178,8 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
     project.programs.push({ ...program, componentId: 'other' });
     let state = initialSimulation();
     for (const componentId of ['esp', 'other']) state = transitionSimulation(state, { ...run, componentId, source: program.source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     state = transitionSimulation(state, { ...run, componentId: 'uno', source: 'void setup(){pinMode(13,OUTPUT);}void loop(){digitalWrite(13,HIGH);delay(1000);digitalWrite(13,LOW);delay(1000);}' }, project);
     state = transitionSimulation(state, http('/led/on', 'other'), project);
     expect(state.firmware.other?.execution?.levels.D5).toBe('HIGH');
@@ -148,6 +189,7 @@ describe('ESP8266 code → HTTP → GPIO14 → existing electrical solver', () =
     expect(state.firmware.uno?.execution?.levels.D13).toBe('LOW');
     state = transitionSimulation(state, { type: 'reset' }, project);
     state = transitionSimulation(state, { ...run, source: program.source }, project);
+    state = transitionSimulation(state, { type: 'firmware-advance', elapsedMs: 400 }, project);
     expect(state.firmware.esp?.execution?.levels.D5).toBe('LOW');
   });
 });

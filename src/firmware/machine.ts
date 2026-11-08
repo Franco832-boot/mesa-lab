@@ -1,4 +1,4 @@
-import { beginWifi, initialWifi } from './wifi';
+import { advanceWifi, beginWifi, initialWifi, WIFI_STA } from './wifi';
 import type { WifiState } from './wifi';
 import type { SourceFile } from '../model/types';
 import { initialFirmwareHttp, localHttpPath } from './httpTypes';
@@ -83,7 +83,7 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
   let steps = 0, lcdTransfers = 0, digitalProbes = 0;
   const finish = (yielded: boolean): UnoAdvanceResult => ({
     execution: { ...previous, timeUs, timeMs: timeUs / 1000, phase, pc, wakeAtUs, wakeReason, wakeAt: wakeAtUs === null ? null : wakeAtUs / 1000,
-      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial, http, frames, texts, textOperands, wifi },
+      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial, http, frames, texts, textOperands, wifi: advanceWifi(wifi, timeUs) },
     gpio, yielded, steps,
   });
   const pop = (at: SourceSpan): Value => operands.pop() ?? fail('type-error', at);
@@ -134,9 +134,13 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
         frames.push({ pc, scopeDepth: scopes.length, operandDepth: operands.length, textDepth: textOperands.length });
         pc = previous.program.functionPcs.get(instruction.name) ?? fail('name-error', at); break;
       }
+      case 'missing-return': return fail('type-error', at);
+      case 'while-yield': wakeAtUs = timeUs + LOOP_QUANTUM_US; wakeReason = 'cooperative'; break;
       case 'function-return': {
+        const returned = instruction.value ? { type: 'bool' as const, value: Number(pop(at).value !== 0) } : null;
         const frame = frames.pop() ?? fail('type-error', at);
         scopes.splice(frame.scopeDepth); texts.splice(frame.scopeDepth); textOperands.length = frame.textDepth; operands.length = frame.operandDepth; pc = frame.pc;
+        if (returned) operands.push(returned);
         if (pc === -1) return finish(false);
         break;
       }
@@ -155,14 +159,18 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
         scope.set(instruction.name, instruction.text); break;
       }
       case 'serial-value-text': serial = appendSerial(serial, textOperands.pop() ?? fail('type-error', at), instruction.newline); break;
-      case 'wifi-ip': textOperands.push(wifi.ip ?? fail('wifi-disconnected', at)); break;
+      case 'wifi-ip': wifi = advanceWifi(wifi, timeUs); textOperands.push(wifi.ip ?? fail('wifi-disconnected', at)); break;
       case 'wifi':
-        if (instruction.name === 'status') operands.push({ type: 'int', value: wifi.status });
+        wifi = advanceWifi(wifi, timeUs);
+        if (instruction.name === 'mode') {
+          if (pop(at).value !== WIFI_STA) return fail('invalid-value', at);
+          wifi = { ...wifi, mode: WIFI_STA }; operands.push({ type: 'bool', value: 1 });
+        } else if (instruction.name === 'status') operands.push({ type: 'int', value: wifi.status });
         else if (instruction.name === 'disconnect') wifi = initialWifi();
         else {
           const password = textOperands.pop() ?? fail('type-error', at);
           const ssid = textOperands.pop() ?? fail('type-error', at);
-          wifi = beginWifi(ssid, password);
+          wifi = beginWifi(ssid, password, timeUs, host?.wifiNetwork);
         }
         break;
       case 'digital-read': {

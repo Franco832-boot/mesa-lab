@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include <ESP8266WebServer.h>
 #include <LittleFS.h>
-#include "Funciones.h"
-#include "Servidor.h"
+#include "funciones.h"
+#include "servidor.h"
 
 ESP8266WebServer servidor(80);
 

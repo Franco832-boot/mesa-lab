@@ -110,3 +110,9 @@ The earlier IoT-panel scenarios above are historical: Control IoT and its exclus
 `firmware-regressions.test.mjs` reads the actual wired DHT11 sketch and verifies bottom-monitor output, clear/continued readings and Stop. It also verifies that preceding firmware Serial survives an invalid disconnected localIP call while the simulator diagnostic remains separate. Selected workspace/project regressions cover source-driven UNO Blink, board context and desktop/mobile panel tab retention without IoT.
 
 See [Phase 2B architecture and executed results](ESP8266_PHASE2B.md) for final counts, failures and limitations. Full cross-browser coverage, physical-device interaction and screenshot-baseline approval are not implied by these focused Chrome checks.
+
+## Validation freeze and current editor cleanup — 2026-11-08
+
+The user requested an end to repetitive execution and requires consultation before any new tests. The original 24/24 Chrome result is retained as baseline evidence, not as verification of later changes. A subsequent focused five-case Chrome run passed (ES/EN desktop/mobile Web view and dropped-response timeout). The latest expanded invocation was interrupted without a completion report. Do not count authored `esp-wifi.test.mjs` cases as passed.
+
+The ESP8266 editor now has no Serial mini-tab or interpreter/library banners; the bottom console remains. `esp-code.test.mjs` and the workspace unit assertion were adapted to this UI contract without changing timeouts and have not been run after that edit. Current status, intermittent failures and pending gates are recorded at the top of [Phase 2B](ESP8266_PHASE2B.md).

@@ -1,7 +1,8 @@
+import { wifiLabels } from './wifiLabels';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { HttpResponse } from '../../firmware/httpTypes';
 import type { UnoExecution } from '../../firmware/machine';
-import { WL_CONNECTED, WL_CONNECT_FAILED } from '../../firmware/wifi';
+import { WL_CONNECTED } from '../../firmware/wifi';
 import type { FirmwareSession } from '../simulation/firmwareRuntime';
 import { useLocale } from '../../locales/useLocale';
 import { preparePreview, createPreviewShell } from './webPreviewDocument';
@@ -31,7 +32,7 @@ export function EspWebPreview({ running, execution, session, request, visible, o
   currentSession.current = session;
   const active = useRef(available && visible);
   active.current = available && visible;
-  useLayoutEffect(() => () => { active.current = false; }, []);
+  useLayoutEffect(() => { active.current = available && visible; return () => { active.current = false; }; }, [available, visible, session]);
   const [page, setPage] = useState<OpenPage | null>(null);
   const [error, setError] = useState('');
   const [path, setPath] = useState('/');
@@ -49,7 +50,7 @@ export function EspWebPreview({ running, execution, session, request, visible, o
     if (available && visible) load('/');
     else { setPage(null); setError(''); }
   }, [available, visible, session, locale]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!page) return;
     const received = new Set<number>();
     const messages = new PreviewBudget(WEB_LIMITS.messagesPerSecond, WEB_LIMITS.messages);
@@ -91,7 +92,7 @@ export function EspWebPreview({ running, execution, session, request, visible, o
       <button type="submit" className="text-button" disabled={!available}>{t('espWebGo')}</button>
     </form>
     <p role="status" data-testid="esp-wifi-status" data-state={wifi?.status ?? 6}>
-      {t(wifi?.status === WL_CONNECTED ? 'espWifiConnected' : wifi?.status === WL_CONNECT_FAILED ? 'espWifiFailed' : 'espWifiDisconnected')}
+      {t(wifiLabels[wifi?.status ?? 6])}
       {wifi?.ip && <> · {wifi.ssid}</>}
     </p>
     {!available && <p>{t('espWebUnavailable')}</p>}

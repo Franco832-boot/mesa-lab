@@ -13,29 +13,27 @@ import { CodeFilesEditor } from './CodeFilesEditor';
 
 const labels: Record<EspCodeSection, TranslationKey> = {
   main: 'espCodeMain', wifi: 'espCodeWifi', functions: 'espCodeFunctions',
-  server: 'espCodeServer', html: 'espCodeHtml', web: 'espWebView', serial: 'serialMonitor',
+  server: 'espCodeServer', html: 'espCodeHtml', web: 'espWebView',
 };
-export function EspProjectEditor({ board, program, explorerOpen, onToggleExplorer, onChange, onFileAction, onOpenMonitor, web, onRevealWeb, openedSessions }: {
+export function EspProjectEditor({ board, program, explorerOpen, onToggleExplorer, onChange, onFileAction, web, onRevealWeb, openedSessions }: {
   board: ContextBoard;
   program: BoardProgram | undefined;
   explorerOpen: boolean;
   onToggleExplorer: () => void;
   onChange: (source: string) => void;
   onFileAction: ((action: ProgramFileAction) => boolean) | undefined;
-  onOpenMonitor: (() => void) | undefined;
   web: EspWebRuntime | undefined;
   onRevealWeb: (() => void) | undefined;
   openedSessions: WeakSet<FirmwareSession>;
 }) {
   const { t } = useLocale();
-  const [utility, setUtility] = useState<'serial' | 'web' | null>(null);
+  const [utility, setUtility] = useState<'web' | null>(null);
   const [error, setError] = useState(false);
   const tabs = useRef(new Map<EspCodeSection, HTMLButtonElement>());
   const active = utility ?? activeEspSection(program);
   const prefix = `esp-code-${encodeURIComponent(board.id)}`;
   const choose = (section: EspCodeSection) => {
     if (section === 'web') { setUtility('web'); setError(false); onRevealWeb?.(); return; }
-    if (section === 'serial') { setUtility('serial'); setError(false); onOpenMonitor?.(); return; }
     const success = onFileAction?.(openEspSection(section, program)) ?? false;
     setError(!success);
     if (success) setUtility(null);
@@ -55,13 +53,12 @@ export function EspProjectEditor({ board, program, explorerOpen, onToggleExplore
           if (target) { event.preventDefault(); choose(target); tabs.current.get(target)?.focus(); }
         }}>{t(labels[section])}</button>)}
     </div>
-    {active !== 'web' && <p className="esp-code-project-note">{t(active === 'html' ? 'espCodeHtmlNote' : 'espCodeProjectNote')}</p>}
     {error && <p role="alert" className="iot-error">{t('codeFileError')}</p>}
     <div className="esp-code-section-panel" role="tabpanel" id={`${prefix}-panel`} aria-labelledby={`${prefix}-${active}`}>
       {web && <EspWebPreview {...web} visible={active === 'web'} openedSessions={openedSessions}
         onAutoOpen={() => { setUtility('web'); onRevealWeb?.(); }} onClose={() => setUtility(null)} />}
       {active === 'web' && !web && <p>{t('espWebUnavailable')}</p>}
-      {active === 'web' ? null : active === 'serial' ? <div className="tool-empty"><p>{t('espUnifiedSerial')}</p><button type="button" className="text-button" onClick={onOpenMonitor}>{t('espOpenSerial')}</button></div> : <CodeFilesEditor board={board} program={program} section={active}
+      {active === 'web' ? null : <CodeFilesEditor board={board} program={program} section={active}
         explorerOpen={explorerOpen} onToggleExplorer={onToggleExplorer} onChange={onChange} onFileAction={onFileAction} />}
     </div>
   </>;

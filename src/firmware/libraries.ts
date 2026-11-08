@@ -12,6 +12,7 @@ const lcdMethods: Readonly<Record<string, MethodSignature>> = {
   };
 export const LIBRARIES: Record<LibraryClass, { header: string | null; constructorArity: number | null; methods: Readonly<Record<string, MethodSignature>> }> = {
   WiFi: { header: 'ESP8266WiFi.h', constructorArity: null, methods: {
+    mode: { minArgs: 1, maxArgs: 1, result: 'float' },
     begin: { minArgs: 2, maxArgs: 2, result: 'void' }, status: { minArgs: 0, maxArgs: 0, result: 'float' },
     localIP: { minArgs: 0, maxArgs: 0, result: 'text' }, disconnect: { minArgs: 0, maxArgs: 0, result: 'void' },
   } },

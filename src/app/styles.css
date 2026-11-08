@@ -2586,9 +2586,7 @@ textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; 
 .esp-code-sections { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .esp-code-sections button { flex: 1 0 auto; min-height: 36px; padding: 6px 9px; font-size: 11px; border-radius: 4px; }
 .esp-code-sections [aria-selected="true"] { background: var(--purple-wash); color: var(--accent-dark); box-shadow: inset 0 -2px var(--accent); }
-.esp-code-project-note { margin: 8px 12px; color: #81788d; font-size: 11px; line-height: 1.6; }
 .esp-code-section-panel { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.esp-code-section-panel > .serial-monitor { margin: 8px 12px; }
 .code-files-body { display: flex; flex: 1; min-height: 100px; min-width: 0; }
 .code-file-explorer { width: 135px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 8px; font-size: 11px; overflow: auto; }
 .code-file-explorer[hidden] { display: none; }
@@ -2635,3 +2633,4 @@ textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; 
 .esp-code-sections { position: sticky; top: 0; z-index: 2; background: var(--surface, #fff); }
 .esp-web-toolbar .text-button, .esp-web-path .text-button { min-height: 36px; padding: 6px 10px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; }
 .esp-web-path input { min-height: 32px; padding: 5px; font-size: 12px; }
+
