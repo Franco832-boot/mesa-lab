@@ -4,6 +4,7 @@ export const MAX_PROGRAM_SOURCE_LENGTH = 500_000;
 export const MAX_PROGRAM_FILES = 40;
 export type ProgramFileAction =
   | { type: 'create'; name: string }
+  | { type: 'create-files'; names: readonly string[]; activeFile: string }
   | { type: 'rename'; name: string; nextName: string }
   | { type: 'delete'; name: string }
   | { type: 'select'; name: string }
@@ -40,11 +41,18 @@ export function applyProgramFileAction(componentId: string, previous: BoardProgr
   if (previous && previous.componentId !== componentId) throw new Error('code-target-mismatch');
   let files = sourceFiles(previous).map((file) => ({ ...file }));
   let activeFile = selectedSourceFile(previous)?.name ?? null;
-  const index = files.findIndex((file) => file.name === action.name);
-  if (action.type === 'create') {
-    if (!validSourceName(action.name) || files.length >= MAX_PROGRAM_FILES || files.some((file) => file.name.toLowerCase() === action.name.toLowerCase())) throw new Error('invalid-source-name');
-    files.push({ name: action.name, source: '' }); activeFile = action.name;
+  if (action.type === 'create' || action.type === 'create-files') {
+    const names = action.type === 'create' ? [action.name] : action.names;
+    const selected = action.type === 'create' ? action.name : action.activeFile;
+    const known = new Set(files.map((file) => file.name.toLowerCase()));
+    if (names.length === 0 || files.length + names.length > MAX_PROGRAM_FILES || !names.includes(selected)) throw new Error('invalid-source-name');
+    for (const name of names) {
+      if (!validSourceName(name) || known.has(name.toLowerCase())) throw new Error('invalid-source-name');
+      known.add(name.toLowerCase());
+    }
+    files.push(...names.map((name) => ({ name, source: '' }))); activeFile = selected;
   } else {
+    const index = files.findIndex((file) => file.name === action.name);
     if (index < 0) throw new Error('source-file-not-found');
     if (action.type === 'select') activeFile = action.name;
     else if (action.type === 'delete') {

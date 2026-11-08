@@ -51,7 +51,6 @@ interface WorkspaceProps {
   execute: (command: EditorCommand) => boolean;
   stageRef: RefObject<HTMLDivElement | null>;
   tool: WorkspaceTool;
-  multiSelect: boolean;
   cancelEpoch: number;
   autoFit: boolean;
   grid: boolean;
@@ -101,7 +100,7 @@ export function Workspace(props: WorkspaceProps) {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             event.stopPropagation();
-            props.onSelectComponent(item.id, event.shiftKey || props.multiSelect);
+            props.onSelectComponent(item.id, event.shiftKey);
             if (item.kind === 'pushbutton' && props.simulation.status === 'running')
               props.simulation.setButton(item.id, true);
           }

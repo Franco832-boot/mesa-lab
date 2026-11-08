@@ -5,7 +5,8 @@ import type { SimulationIssue } from '../../sim/types';
 import { Icon } from '../../shared/Icon';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { groupDiagnostics } from './diagnostics';
-import { firmwareErrorMessages, statusMessages } from './messages';
+import { statusMessages } from './messages';
+import { BoardRuntimeMonitor } from './BoardRuntimeMonitor';
 import type { FirmwareState } from './firmwareRuntime';
 import type { SimulationStatus } from './runtime';
 
@@ -16,6 +17,7 @@ interface SimulationConsoleProps {
   locked: boolean;
   diagnostics: readonly SimulationIssue[] | null;
   firmware?: FirmwareState;
+  onClearSerial?: (id: string) => void;
   initialIssue: TranslationKey | null;
   components: readonly ElectronicComponent[];
   onNavigate: (ids: readonly string[]) => void;
@@ -28,6 +30,7 @@ export function SimulationConsole({
   locked,
   diagnostics,
   firmware = {},
+  onClearSerial,
   initialIssue,
   components,
   onNavigate,
@@ -65,34 +68,8 @@ export function SimulationConsole({
           >
             <p>{t(locked ? 'simulationLocked' : 'simulationReady')}</p>
             {initialIssue && <p>{t(initialIssue)}</p>}
-            {Object.entries(firmware).map(([id, instance]) => {
-              const serial = instance.execution?.serial;
-              return serial?.baudRate ? <section className="serial-monitor" key={`serial-${id}`} aria-label={`${t('serialMonitor')} · ${id}`}>
-                <h3>{t('serialMonitor')} · {id} · {serial.baudRate} baud</h3>
-                <p>{t('serialVirtual')}</p>
-                <pre data-testid="serial-output" data-component-id={id} role="log" aria-live="polite" aria-label={`${t('serialMonitor')} · ${id}`}>{serial.output}</pre>
-                {serial.truncated && <p>{t('serialTruncated')}</p>}
-              </section> : null;
-            })}
-            {failures.map(({ id, error, location }) => (
-              <p
-                key={id}
-                role="alert"
-                data-testid="firmware-error"
-                data-component-id={id}
-                data-code={error}
-              >
-                <strong>
-                  {id} · {t('firmwareError')}
-                </strong>
-                : {t(firmwareErrorMessages[error])}
-                {location && (
-                  <>
-                    {' '}
-                    · {t('firmwareLine')} {location.line}, {t('firmwareColumn')} {location.column}
-                  </>
-                )}
-              </p>
+            {Object.entries(firmware).map(([id, instance]) => (
+              <BoardRuntimeMonitor key={id} componentId={id} instance={instance} onClear={onClearSerial ? () => onClearSerial(id) : undefined} />
             ))}
             {diagnostics && (
               <DiagnosticsPanel

@@ -20,6 +20,24 @@ import type { LibraryClass } from './libraries';
 import type { ObjectDeclaration } from './ast';
 
 type Operation =
+  | { op: 'text-push'; text: string }
+  | { op: 'text-load'; name: string }
+  | { op: 'text-declare'; name: string; text: string }
+  | { op: 'wifi'; name: 'begin' | 'status' | 'disconnect' | 'mode' }
+  | { op: 'wifi-ip' }
+  | { op: 'serial-value-text'; newline: boolean }
+  | { op: 'web-file'; receiver: string; file: string; contentType: string }
+
+  | { op: 'invoke'; name: string }
+  | { op: 'function-return'; value: boolean }
+  | { op: 'missing-return' | 'while-yield' }
+  | { op: 'digital-read' }
+  | { op: 'web-call'; receiver: string; name: 'begin' | 'handleClient' }
+  | { op: 'fs-begin' }
+  | { op: 'web-route'; receiver: string; path: string; handler: string }
+  | { op: 'web-static'; receiver: string; path: string; file: string }
+  | { op: 'web-send'; receiver: string; contentType: string }
+
   | { op: 'wire-begin' }
   | { op: 'lcd-text'; receiver: string; text: string }
   | { op: 'lcd-call'; receiver: string; name: string; arity: number }
@@ -53,9 +71,10 @@ export interface UnoProgram extends SketchAst {
   board: BoardKind;
   code: readonly Instruction[];
   loopPc: number;
+  functionPcs: ReadonlyMap<string, number>;
 }
 interface Binding {
-  type: ValueType;
+  type: ValueType | 'text';
   constant: boolean;
 }
 const reserved = new Set([
@@ -76,13 +95,14 @@ const reserved = new Set([
   'bool',
   'unsigned',
   'const',
-  'float', 'isnan', ...Object.keys(LIBRARIES),
+  'float', 'isnan', 'digitalRead', ...Object.keys(LIBRARIES),
   ...Object.keys(GPIO_BUILTINS),
   ...Object.keys(CLOCK_BUILTINS),
 ]);
 
 function references(value: Expression, name: string): boolean {
   switch (value.kind) {
+    case 'invoke': return value.args.some((arg) => references(arg, name));
     case 'string': return false;
     case 'isnan': return references(value.value, name);
     case 'method': return value.receiver === name || value.args.some((arg) => references(arg, name));
@@ -104,7 +124,10 @@ function references(value: Expression, name: string): boolean {
 class Compiler {
   private code: Instruction[] = [];
   private scopes: Map<string, Binding>[] = [new Map()];
-  private objects = new Map<string, LibraryClass>([['Serial', 'Serial'], ['Wire', 'Wire']]);
+  private objects = new Map<string, LibraryClass>([['Serial', 'Serial'], ['Wire', 'Wire'], ['LittleFS', 'LittleFS'], ['WiFi', 'WiFi']]);
+  private functions = new Map<string, 'void' | 'bool'>();
+  private functionResult: 'void' | 'bool' = 'void';
+  private inFunction = false;
   private headers: readonly string[] = [];
   constructor(private readonly board: BoardKind) {}
   private emit(operation: Operation, at: SourceSpan): number {
@@ -148,9 +171,37 @@ class Compiler {
         return null;
     }
   }
+  private isText(value: Expression): boolean {
+    return value.kind === 'string' || (value.kind === 'atom' && [...this.scopes].reverse().find((scope) => scope.has(value.token))?.get(value.token)?.type === 'text')
+      || (value.kind === 'method' && value.receiver === 'WiFi' && value.name === 'localIP');
+  }
+  private textExpression(value: Expression): void {
+    if (value.kind === 'string') this.emit({ op: 'text-push', text: value.value }, value.at);
+    else if (value.kind === 'atom' && this.binding(value.token, value.at).type === 'text') this.emit({ op: 'text-load', name: value.token }, value.at);
+    else if (value.kind === 'method' && value.receiver === 'WiFi' && value.name === 'localIP' && value.args.length === 0 && this.board === 'esp8266' && this.headers.includes('ESP8266WiFi.h')) this.emit({ op: 'wifi-ip' }, value.at);
+    else fail('type-error', value.at);
+  }
+  private textDeclaration(value: { name: string; value: string; at: SourceSpan }): void {
+    const scope = this.scopes.at(-1) ?? fail('name-error', value.at);
+    if (scope.has(value.name) || this.objects.has(value.name) || reserved.has(value.name) || constantValue(value.name, this.board, value.at)) fail('name-error', value.at);
+    this.emit({ op: 'text-declare', name: value.name, text: value.value }, value.at);
+    scope.set(value.name, { type: 'text', constant: true });
+  }
   private expression(value: Expression, allowVoid = false): void {
     const at = value.at;
     switch (value.kind) {
+      case 'invoke': {
+        if (value.name === 'digitalRead') {
+          if (value.args.length !== 1) return fail('type-error', at);
+          this.expression(value.args[0] ?? fail('type-error', at));
+          this.emit({ op: 'digital-read' }, at); return;
+        }
+        if (value.args.length !== 0 || (!allowVoid && this.functions.get(value.name) === 'void')) return fail('unsupported-syntax', at);
+        if (!this.functions.has(value.name)) return fail('name-error', at);
+        this.emit({ op: 'invoke', name: value.name }, at);
+        if (this.functions.get(value.name) === 'void') this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        return;
+      }
       case 'string': return fail('type-error', at);
       case 'isnan': this.expression(value.value); this.emit({ op: 'isnan' }, at); return;
       case 'method': {
@@ -159,7 +210,40 @@ class Compiler {
         const signature = methodSignature(type, value.name);
         if (!signature) return fail('unsupported-syntax', at);
         if (value.args.length < signature.minArgs || value.args.length > signature.maxArgs || (!allowVoid && signature.result === 'void')) return fail('type-error', at);
-        if (type === 'Wire') {
+        if (type === 'WiFi') {
+          if (this.board !== 'esp8266' || !this.headers.includes('ESP8266WiFi.h') || value.name === 'localIP') return fail('type-error', at);
+          if (value.name === 'begin') for (const arg of value.args) this.textExpression(arg);
+          if (value.name === 'mode') this.expression(value.args[0] ?? fail('type-error', at));
+          if (value.name !== 'begin' && value.name !== 'status' && value.name !== 'disconnect' && value.name !== 'mode') return fail('unsupported-syntax', at);
+          this.emit({ op: 'wifi', name: value.name }, at);
+          if (value.name !== 'status' && value.name !== 'mode') this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else if (type === 'ESP8266WebServer' || type === 'LittleFS') {
+          if (this.board !== 'esp8266' || !this.headers.includes(type === 'LittleFS' ? 'LittleFS.h' : 'ESP8266WebServer.h')) return fail('unsupported-syntax', at);
+          const text = (index: number) => {
+            const arg = value.args[index];
+            return arg?.kind === 'string' ? arg.value : fail('unsupported-syntax', arg?.at ?? at);
+          };
+          if (type === 'LittleFS') this.emit({ op: 'fs-begin' }, at);
+          else if (value.name === 'on') {
+            const method = value.args.length === 3 ? value.args[1] : null, handler = value.args[value.args.length - 1];
+            if ((method && (method.kind !== 'atom' || method.token !== 'HTTP_GET')) || handler?.kind !== 'atom' || this.functions.get(handler.token) !== 'void') return fail('unsupported-syntax', at);
+            this.emit({ op: 'web-route', receiver: value.receiver, path: text(0), handler: handler.token }, at);
+          } else if (value.name === 'serveStatic') {
+            const fs = value.args[1];
+            if (fs?.kind !== 'atom' || fs.token !== 'LittleFS') return fail('unsupported-syntax', at);
+            this.emit({ op: 'web-static', receiver: value.receiver, path: text(0), file: text(2) }, at);
+          } else if (value.name === 'send') {
+            this.expression(value.args[0] ?? fail('type-error', at));
+            this.textExpression(value.args[2] ?? fail('type-error', at));
+            this.emit({ op: 'web-send', receiver: value.receiver, contentType: text(1) }, at);
+          } else if (value.name === 'streamFile') {
+            const file = value.args[0];
+            if (!this.headers.includes('LittleFS.h') || file?.kind !== 'method' || file.receiver !== 'LittleFS' || file.name !== 'open' || file.args.length < 1 || file.args.length > 2 || file.args[0]?.kind !== 'string' || (file.args[1] && (file.args[1].kind !== 'string' || file.args[1].value !== 'r'))) return fail('unsupported-syntax', at);
+            this.emit({ op: 'web-file', receiver: value.receiver, file: file.args[0].value, contentType: text(1) }, at);
+          } else if (value.name === 'begin' || value.name === 'handleClient') this.emit({ op: 'web-call', receiver: value.receiver, name: value.name }, at);
+          else return fail('unsupported-syntax', at);
+          this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else if (type === 'Wire') {
           if (!this.headers.includes('Wire.h') && !this.headers.includes('LiquidCrystal_I2C.h')) return fail('unsupported-syntax', at);
           this.emit({ op: 'wire-begin' }, at); this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
         } else if (type === 'Serial') {
@@ -167,6 +251,10 @@ class Compiler {
           if (value.name === 'begin') {
             if (!argument) return fail('type-error', at);
             this.expression(argument); this.emit({ op: 'serial-begin' }, at);
+          } else if (argument && this.isText(argument)) {
+            if (value.args.length !== 1) return fail('type-error', at);
+            this.textExpression(argument);
+            this.emit({ op: 'serial-value-text', newline: value.name === 'println' }, at);
           } else if (!argument || argument.kind === 'string') {
             if (value.args.length > 1) return fail('type-error', at);
             this.emit({ op: 'serial-text', text: argument?.kind === 'string' ? argument.value : '', newline: value.name === 'println' }, at);
@@ -199,7 +287,7 @@ class Compiler {
             !this.scopes.some((scope) => scope.has(value.token))
           )
             fail('invalid-value', at);
-          this.binding(value.token, at);
+          if (this.binding(value.token, at).type === 'text') fail('type-error', at);
           this.emit({ op: 'load', name: value.token }, at);
         }
         return;
@@ -300,6 +388,15 @@ class Compiler {
   }
   private statement(value: Statement): void {
     switch (value.kind) {
+      case 'while': {
+        const conditionPc = this.code.length;
+        this.expression(value.condition);
+        const exit = this.emit({ op: 'branch', when: false, target: 0 }, value.at);
+        this.scoped([value.body], value.body.at);
+        this.emit({ op: 'while-yield' }, value.at);
+        this.emit({ op: 'jump', target: conditionPc }, value.at);
+        this.patch(exit, this.code.length); return;
+      }
       case 'for': {
         this.scopes.push(new Map());
         this.emit({ op: 'enter' }, value.at);
@@ -325,12 +422,23 @@ class Compiler {
         this.scopes.pop();
         return;
       }
-      case 'return': this.emit({ op: 'return' }, value.at); return;
+      case 'return': {
+        if (this.inFunction && this.functionResult === 'bool') {
+          if (!value.value) return fail('type-error', value.at);
+          this.expression(value.value); this.emit({ op: 'function-return', value: true }, value.at);
+        } else {
+          if (value.value) return fail('type-error', value.at);
+          if (this.inFunction) this.emit({ op: 'function-return', value: false }, value.at);
+          else this.emit({ op: 'return' }, value.at);
+        }
+        return;
+      }
       case 'empty':
         return;
       case 'block':
         this.scoped(value.body, value.at);
         return;
+      case 'text-declare': this.textDeclaration(value); return;
       case 'declare':
         this.declaration(value);
         return;
@@ -360,9 +468,13 @@ class Compiler {
   }
   compile(ast: SketchAst): UnoProgram {
     this.headers = ast.headers;
+    if (this.board !== 'esp8266' && ast.headers.some((header) => ['ESP8266WiFi.h', 'ESP8266WebServer.h', 'LittleFS.h'].includes(header))) fail('unsupported-syntax');
+    this.functions = new Map(ast.functions.map((fn) => [fn.name, fn.result]));
+    for (const fn of ast.functions) if (reserved.has(fn.name) || this.objects.has(fn.name) || constantValue(fn.name, this.board, fn.at)) fail('name-error', fn.at);
     const at = { offset: 0, line: 1, column: 1 };
     for (const declaration of ast.globals) {
       if (declaration.kind === 'construct') this.construct(declaration, ast.headers);
+      else if (declaration.kind === 'text-declare') this.textDeclaration(declaration);
       else this.declaration(declaration, true);
     }
     this.scoped(ast.setup, ast.setup[0]?.at ?? at);
@@ -370,10 +482,21 @@ class Compiler {
     const loopPc = this.code.length;
     this.scoped(ast.loop, ast.loop[0]?.at ?? at);
     this.emit({ op: 'repeat' }, at);
-    return { ...ast, board: this.board, code: this.code, loopPc };
+    const functionPcs = new Map<string, number>();
+    this.inFunction = true;
+    for (const fn of ast.functions) {
+      if (this.scopes[0]?.has(fn.name) || this.objects.has(fn.name)) fail('name-error', fn.at);
+      this.functionResult = fn.result;
+      functionPcs.set(fn.name, this.code.length);
+      this.scoped(fn.body, fn.at);
+      if (fn.result === 'void') this.emit({ op: 'function-return', value: false }, fn.at);
+      else this.emit({ op: 'missing-return' }, fn.at);
+    }
+    return { ...ast, board: this.board, code: this.code, loopPc, functionPcs };
   }
   private construct(value: ObjectDeclaration, headers: readonly string[]): void {
     const contract = LIBRARIES[value.className];
+    if (value.className === 'ESP8266WebServer' && this.board !== 'esp8266') return fail('unsupported-syntax', value.at);
     if (!contract.header || !headers.includes(contract.header)) return fail('unsupported-syntax', value.at);
     if (this.objects.has(value.name) || reserved.has(value.name) || this.scopes.some((scope) => scope.has(value.name)) || constantValue(value.name, this.board, value.at)) return fail('name-error', value.at);
     for (const arg of value.args) this.expression(arg);
@@ -386,3 +509,5 @@ export function compileArduinoSubset(source: string, board: BoardKind = 'arduino
   if (board !== 'arduino-uno' && board !== 'esp8266') return fail('invalid-value');
   return new Compiler(board).compile(parseSketch(source));
 }
+
+export function compileAst(ast: SketchAst, board: BoardKind): UnoProgram { return new Compiler(board).compile(ast); }

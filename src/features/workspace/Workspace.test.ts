@@ -11,14 +11,14 @@ const noop = () => undefined;
 const props: ComponentProps<typeof Workspace> = {
   wiperPreview: null, onWiperPreview: noop, onWiperCommit: noop, controlActive: false, libraryDrag: null,
   locked: false, simulation: { ...initialSimulation(), start: noop, pause: noop, stop: noop, reset: noop,
-    runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setDht11: noop, setPotentiometer: noop },
+    requestFirmwareHttp: () => ({ status: 503, contentType: 'text/plain', body: '503' }), clearSerial: () => undefined, runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setDht11: noop, setPotentiometer: noop },
   components: [createComponent('resistor', { x: 100, y: 80 }, 'r'),
     createComponent('breadboard', { x: 0, y: 0 }, 'bb'), createComponent('potentiometer', { x: 200, y: 80 }, 'pot'),
     createComponent('arduino-uno', { x: 200, y: 200 }, 'uno'), createComponent('esp8266', { x: 400, y: 200 }, 'esp')],
   wires: [{ id: 'w', from: { componentId: 'r', pinId: '1' }, to: { componentId: 'bb', pinId: 'a1' }, color: '#668c75', waypoints: [] }],
   viewport: { offset: { x: 10, y: -20 }, zoom: 1.2 }, onViewportChange: noop, selectedIds: ['r'], selectedWire: null,
   onSelectComponent: noop, onSelectWire: noop, onClearSelection: noop, onAdd: noop, execute: () => true,
-  stageRef: { current: null }, tool: 'select', multiSelect: false, cancelEpoch: 0, autoFit: false,
+  stageRef: { current: null }, tool: 'select', cancelEpoch: 0, autoFit: false,
   grid: true, onToggleGrid: noop, wireColor: '#668c75', connectionRequest: null,
 };
 const render = (extra: Partial<ComponentProps<typeof Workspace>> = {}) => renderToStaticMarkup(createElement(LocaleProvider, {

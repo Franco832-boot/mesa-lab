@@ -15,6 +15,7 @@ async function selectedCodeBoard(page, id) {
 async function tools(page, tab) {
   if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('sidebar-toggle').click();
   await page.getByTestId(`tool-tab-${tab}`).click();
+  if (!await page.getByTestId('tool-sidebar').isVisible()) await page.getByTestId('sidebar-toggle').click();
   assert.equal(await page.getByTestId(`tool-tab-${tab}`).getAttribute('aria-selected'), 'true');
 }
 async function closeInspector(page) {
@@ -279,8 +280,8 @@ test('unified tabs, keyboard resizing and collapse preserve circuit DOM identity
   await resizer.press('End');
   assert.equal(await resizer.getAttribute('aria-valuenow'), await resizer.getAttribute('aria-valuemax'));
   const codeWidth = await resizer.getAttribute('aria-valuenow');
-  await tools(page, 'iot');
-  await page.getByTestId('tool-tab-iot').press('Home');
+  await tools(page, 'code');
+  await page.getByTestId('tool-tab-code').press('Home');
   assert.equal(await page.getByTestId('tool-tab-components').getAttribute('aria-selected'), 'true');
   assert.equal(await resizer.getAttribute('aria-valuenow'), componentsWidth);
   await page.getByTestId('sidebar-toggle').click();
@@ -425,7 +426,7 @@ for (const width of [1440, 390]) {
   });
 }
 
-test('code and IoT share automatic/manual board context and independent saved source', async (t) => {
+test('code retains automatic/manual board context without Control IoT and independent saved source', async (t) => {
   const page = await openFixture(harness.browser, t, workspaceFixture());
   await tools(page, 'code');
   const code = panel(page, 'code');
@@ -438,12 +439,11 @@ test('code and IoT share automatic/manual board context and independent saved so
   await selectedCodeBoard(page, 'esp');
   assert.equal(await editor.inputValue(), '');
   await editor.fill('// ESP source');
-  await tools(page, 'iot');
-  assert.equal(await panel(page, 'iot').getByTestId('board-selector').inputValue(), 'esp');
-  await panel(page, 'iot').getByTestId('board-selector').selectOption('uno');
+  assert.equal(await page.getByTestId('tool-tab-iot').count(), 0);
+  await codeBoard(page, 'uno').click();
   await select(page, 'r');
   await closeInspector(page);
-  assert.equal(await panel(page, 'iot').getByTestId('board-selector').inputValue(), 'uno');
+  await selectedCodeBoard(page, 'uno');
   await tools(page, 'code');
   assert.equal(await editor.inputValue(), '// UNO source');
   const resistorTransform = await part(page, 'r').getAttribute('transform');
@@ -476,7 +476,7 @@ test('tool switching and stored code edits retain running and paused electrical 
   assert.ok(stage && led);
   const currentBrightness = await part(page, 'led').getAttribute('data-brightness');
   const transform = await page.locator('.workspace-svg > g').getAttribute('transform');
-  for (const tab of ['code', 'iot', 'components', 'code']) {
+  for (const tab of ['code', 'components', 'code']) {
     await tools(page, tab);
     await status(page, 'running');
     assert.equal(await part(page, 'led').getAttribute('data-brightness'), currentBrightness);
@@ -526,7 +526,7 @@ for (const width of [1440, 390]) {
       const stage = await page.getByTestId('workspace-stage').elementHandle();
       assert.ok(stage);
       assert.equal(await page.getByTestId('tool-sidebar').getAttribute('aria-label'), locale === 'en' ? 'Workspace tools' : 'Herramientas de la mesa');
-      for (const tab of ['components', 'code', 'iot']) {
+      for (const tab of ['components', 'code']) {
         await tools(page, tab);
         const control = page.getByTestId(`tool-tab-${tab}`);
         assert.equal(await control.getAttribute('role'), 'tab');
@@ -564,100 +564,13 @@ for (const width of [1440, 390]) {
   }
 }
 
-test('explicit virtual HTTP routes drive only the addressed ESP electrical circuit and preserve per-device sessions', { timeout: 90000 }, async (t) => {
+test('retired Control IoT is absent and independent ESP circuits stay inactive without firmware', async (t) => {
   const page = await openFixture(harness.browser, t, dualDeviceFixture());
-  const realVirtualAddressRequests = [];
-  page.on('request', (request) => {
-    if (/^http:\/\/192\.0\.2\./.test(request.url())) realVirtualAddressRequests.push(request.url());
-  });
-  await tools(page, 'iot');
-  const iot = panel(page, 'iot');
-  const selector = iot.getByTestId('board-selector');
-  assert.equal(await selector.inputValue(), 'uno');
-  assert.equal(await iot.getByTestId('iot-device-status').getAttribute('data-status'), 'unsupported');
-  assert.equal(await iot.getByTestId('iot-connect').count(), 0, 'UNO has no virtual WiFi controls');
+  assert.equal(await page.getByTestId('tool-tab-iot').count(), 0);
+  assert.equal(await panel(page, 'iot').count(), 0);
   await page.getByTestId('simulation-start').click();
-  await selector.selectOption('esp-one');
-  assert.equal(await iot.getByTestId('iot-device-status').getAttribute('data-status'), 'unconfigured');
-  assert.equal(await iot.getByTestId('iot-request-url').inputValue(), '');
-  await iot.getByTestId('iot-install-example').click();
-  assert.match(await iot.getByTestId('iot-route-list').textContent(), /GET \/led\/on.*D1.*HIGH/s);
-  await iot.getByTestId('iot-connect').click();
-  const firstIP = (await iot.getByTestId('iot-device-ip').textContent()).trim();
-  assert.match(firstIP, /^192\.0\.2\.[1-9]\d{0,2}$/);
-  assert.equal(await iot.getByTestId('iot-device-status').getAttribute('data-status'), 'connected');
-  assert.equal(await iot.getByTestId('iot-request-url').inputValue(), '', 'Connecting cannot silently issue or populate a request');
-  await brightness(page, 'led-one', false);
-  await brightness(page, 'led-two', false);
-  await selector.selectOption('esp-two');
-  assert.equal(await iot.getByTestId('iot-device-status').getAttribute('data-status'), 'unconfigured');
-  await iot.getByTestId('iot-install-example').click();
-  await iot.getByTestId('iot-connect').click();
-  const secondIP = (await iot.getByTestId('iot-device-ip').textContent()).trim();
-  assert.notEqual(secondIP, firstIP);
-  await iot.getByTestId('iot-request-method').selectOption('GET');
-  await iot.getByTestId('iot-request-url').fill(`http://${firstIP}/led/on`);
-  await iot.getByTestId('iot-send').click();
-  assert.match(await iot.getByTestId('iot-response-status').textContent(), /\b409\b/);
-  assert.equal(await iot.getByTestId('iot-response-error').getAttribute('data-error'), 'target-mismatch');
-  await brightness(page, 'led-one', false);
-  await brightness(page, 'led-two', false);
-  await selector.selectOption('esp-one');
-  assert.equal(await iot.getByTestId('iot-response-empty').count(), 1, 'Another device response does not leak into this device');
-  await iot.getByTestId('iot-request-url').fill(`http://${firstIP}/led/on`);
-  await iot.getByTestId('iot-send').click();
-  assert.match(await iot.getByTestId('iot-response-status').textContent(), /\b200\b/);
-  assert.equal((await iot.getByTestId('iot-response-body').textContent()).trim(), 'D1=HIGH');
-  await brightness(page, 'led-one', true);
-  await brightness(page, 'led-two', false);
-  // The GPIO drive includes 50 ohm output resistance; HTTP enters the same electrical engine.
-  const expectedBrightness = (3.3 - 2) / (330 + 50) / 0.02;
-  assert.ok(Math.abs(Number(await part(page, 'led-one').getAttribute('data-brightness')) - expectedBrightness) < 1e-9);
-  await tools(page, 'code');
-  await selectedCodeBoard(page, 'esp-one');
-  await panel(page, 'code').getByTestId('board-code-editor').fill('// Stored source does not execute or replace virtual routes');
-  await tools(page, 'iot');
-  assert.equal(await selector.inputValue(), 'esp-one');
-  assert.equal((await iot.getByTestId('iot-device-ip').textContent()).trim(), firstIP);
-  await brightness(page, 'led-one', true);
-  await page.getByTestId('simulation-pause').click();
-  await iot.getByTestId('iot-request-url').fill(`http://${firstIP}/led/off`);
-  await iot.getByTestId('iot-send').click();
-  assert.equal(await iot.getByTestId('iot-response-error').getAttribute('data-error'), 'not-running');
-  await brightness(page, 'led-one', true);
-  await page.getByTestId('simulation-start').click();
-  await iot.getByTestId('iot-send').click();
-  assert.match(await iot.getByTestId('iot-response-status').textContent(), /\b200\b/);
-  await brightness(page, 'led-one', false);
-  await selector.selectOption('esp-two');
-  assert.equal((await iot.getByTestId('iot-device-ip').textContent()).trim(), secondIP);
-  assert.equal(await iot.getByTestId('iot-response-error').getAttribute('data-error'), 'target-mismatch');
-  await iot.getByTestId('iot-request-url').fill(`http://${secondIP}/led/on`);
-  await iot.getByTestId('iot-send').click();
-  await brightness(page, 'led-two', true);
-  await brightness(page, 'led-one', false);
-  await iot.getByTestId('iot-history').locator('summary').click();
-  assert.equal(await iot.getByTestId('iot-history').locator('li').count(), 2);
-  assert.deepEqual(realVirtualAddressRequests, [], 'Virtual HTTP must not call a real network address');
+  await brightness(page, 'led-one', false); await brightness(page, 'led-two', false);
   await page.getByTestId('simulation-stop').click();
-  await brightness(page, 'led-one', false);
-  await brightness(page, 'led-two', false);
-  assert.equal(await iot.getByTestId('iot-device-status').getAttribute('data-status'), 'disconnected');
-  assert.equal(await iot.getByTestId('iot-device-ip').count(), 0);
   const saved = await save(page);
-  for (const id of ['esp-one', 'esp-two']) {
-    const board = saved.components.find((component) => component.id === id);
-    assert.deepEqual(board.properties.virtualNetwork.routes.map((route) => route.path), ['/led/on', '/led/off']);
-    assert.ok(board.properties.virtualNetwork.routes.every((route) => route.gpio.pinId === 'D1'));
-  }
-  assert.equal(saved.programs.find((program) => program.componentId === 'esp-one').execution, 'unavailable');
-  assert.equal(Object.hasOwn(saved, 'virtualNetwork'), false);
-  await page.reload();
-  await status(page, 'stopped');
-  await tools(page, 'iot');
-  await selector.selectOption('esp-one');
-  assert.equal(await iot.getByTestId('iot-device-status').getAttribute('data-status'), 'disconnected');
-  assert.equal(await iot.getByTestId('iot-response-empty').count(), 1);
-  assert.equal(await iot.getByTestId('iot-route-list').locator('li').count(), 2);
-  await brightness(page, 'led-one', false);
+  assert.equal(saved.components.filter(component => component.kind === 'esp8266').length, 2);
 });

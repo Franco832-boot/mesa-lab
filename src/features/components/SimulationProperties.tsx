@@ -13,9 +13,11 @@ import { NumberProperty } from './PropertyFields';
 export function SimulationProperties({
   component,
   simulation,
+  gpioOnly = false,
 }: {
   component: ElectronicComponent;
   simulation: SimulationController;
+  gpioOnly?: boolean;
 }) {
   const { t, locale } = useLocale();
   const result = ownInput(simulation.snapshot?.components, component.id);
@@ -29,6 +31,7 @@ export function SimulationProperties({
   const board = component.kind === 'arduino-uno' || component.kind === 'esp8266';
   return (
     <section className="simulation-properties" aria-label={t('electricalResults')}>
+      {!gpioOnly && <>
       <h4>{t('electricalResults')}</h4>
       {result?.lcd && <dl className="electrical-values" data-testid="lcd-status">
         <div><dt>{t('lcdPower')}</dt><dd>{t(result.lcd.powered ? 'lcdPowered' : 'lcdUnpowered')}</dd></div>
@@ -132,9 +135,10 @@ export function SimulationProperties({
         )}
         </>
       )}
+      </>}
       {board && (component.kind === 'arduino-uno' || component.kind === 'esp8266') && (
         <div className="gpio-controls">
-          <h4>{t('simulationManual')}</h4>
+          {!gpioOnly && <h4>{t('simulationManual')}</h4>}
           <p>{t('boardPowerAssumption')}</p>
           <p>{t('gpioReferenceNote')}</p>
           <p>{t('logicVoltage')}: {value(component.properties.logicVoltage, 'V')} · {t('gpioLimit')}: {value(GPIO_CURRENT_LIMIT_A[component.kind] * 1000, 'mA')}</p>

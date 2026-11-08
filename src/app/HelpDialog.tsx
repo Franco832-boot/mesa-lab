@@ -2,13 +2,17 @@ import { useLocale } from '../locales/useLocale';
 import { Dialog } from '../shared/Dialog';
 import { Icon } from '../shared/Icon';
 
-const roadmapKeys = [
-  'roadmap1',
-  'roadmap2',
-  'roadmap3',
-  'roadmap4',
-  'roadmap5',
-  'roadmap6',
+const guideSections = [
+  ['helpComponents', 'helpComponentsDetail'],
+  ['helpWires', 'helpWiresDetail'],
+  ['helpBreadboard', 'helpBreadboardDetail'],
+  ['helpProjects', 'helpProjectsDetail'],
+  ['helpCode', 'helpCodeDetail'],
+  ['helpSimulation', 'helpSimulationDetail'],
+  ['helpSerial', 'helpSerialDetail'],
+  ['helpSensors', 'helpSensorsDetail'],
+  ['helpLcd', 'helpLcdDetail'],
+  ['helpStorage', 'helpStorageDetail'],
 ] as const;
 
 export function HelpDialog({ onClose }: { onClose: () => void }) {
@@ -23,15 +27,12 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <p>{t('helpGestureDetail')}</p>
         </div>
       </div>
-      <ol className="roadmap-list">
-        {roadmapKeys.map((key, i) => (
-          <li key={key} className={i === 3 ? 'current' : ''}>
-            <span className="roadmap-number">0{i + 1}</span>
-            <p>{t(key)}</p>
-            {i === 3 && <span className="small-tag">{t('current')}</span>}
-          </li>
-        ))}
-      </ol>
+      <div className="help-sections">
+        {guideSections.map(([title, detail]) => <section key={title} aria-labelledby={`guide-${title}`}>
+          <h3 id={`guide-${title}`}>{t(title)}</h3>
+          <p>{t(detail)}</p>
+        </section>)}
+      </div>
       <button className="primary-button dialog-done" onClick={onClose}>
         {t('done')}
         <Icon name="check" size={16} />

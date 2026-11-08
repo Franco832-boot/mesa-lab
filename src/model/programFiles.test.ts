@@ -9,6 +9,7 @@ import { editorCommandApplied, projectReducer, projectReplaced, redoApplied, und
 import { createAppStore } from '../app/store';
 import { migratePersistedProject } from '../app/persistence';
 import type { BoardProgram, CircuitProject } from './types';
+import { openEspSection } from './espProjectFiles';
 
 const fixture = (): CircuitProject => ({ ...createProject('files'), components: [
   createComponent('arduino-uno', { x: 10, y: 20 }, 'uno'), createComponent('esp8266', { x: 300, y: 20 }, 'esp'),
@@ -105,13 +106,20 @@ describe('per-board source files', () => {
       first.store.dispatch(editorCommandApplied(command('uno', { type: 'edit', name: 'main.ino', source: '// UNO main' })));
       first.store.dispatch(editorCommandApplied(command('uno', { type: 'create', name: 'config.h' })));
       first.store.dispatch(editorCommandApplied(command('uno', { type: 'edit', name: 'config.h', source: '// UNO configuration' })));
-      first.store.dispatch(editorCommandApplied(command('esp', { type: 'create', name: 'index.html' })));
+      for (const section of ['wifi', 'functions', 'server', 'html'] as const) {
+        const program = first.store.getState().project.document.programs.find((item) => item.componentId === 'esp');
+        first.store.dispatch(editorCommandApplied(command('esp', openEspSection(section, program))));
+      }
+      first.store.dispatch(editorCommandApplied(command('esp', { type: 'edit', name: 'main.ino', source: '#include "wifi.h"\nvoid setup(){connectWifi();}\nvoid loop(){}' })));
+      first.store.dispatch(editorCommandApplied(command('esp', { type: 'edit', name: 'wifi.h', source: '#pragma once\nvoid connectWifi();' })));
+      first.store.dispatch(editorCommandApplied(command('esp', { type: 'edit', name: 'wifi.cpp', source: '#include "wifi.h"\nvoid connectWifi(){}' })));
       first.store.dispatch(editorCommandApplied(command('esp', { type: 'edit', name: 'index.html', source: '<button>ESP only</button>' })));
       await first.saveNow(); first.persistor.pause();
       second = await open();
       expect(second.store.getState().project.document.programs).toEqual(first.store.getState().project.document.programs);
       expect(selectedSourceFile(second.store.getState().project.document.programs.find((program) => program.componentId === 'uno'))?.source).toBe('// UNO configuration');
       expect(selectedSourceFile(second.store.getState().project.document.programs.find((program) => program.componentId === 'esp'))?.source).toBe('<button>ESP only</button>');
+      expect(second.store.getState().project.document.programs.find((program) => program.componentId === 'esp')?.files).toHaveLength(8);
     } finally { first.persistor.pause(); second?.persistor.pause(); await first.persistor.flush(); await second?.persistor.flush(); }
   });
 });

@@ -7,11 +7,18 @@ export function useWorkspaceTools() {
     catch { return decodeWorkspacePreferences(null); }
   });
   useEffect(() => {
-    try { localStorage.setItem(WORKSPACE_PREFERENCES_KEY, JSON.stringify(preferences)); }
+    try {
+      const source = JSON.stringify(preferences);
+      if (localStorage.getItem(WORKSPACE_PREFERENCES_KEY) !== source) localStorage.setItem(WORKSPACE_PREFERENCES_KEY, source);
+    }
     catch { /* Preferences remain usable for this session. */ }
   }, [preferences]);
   return {
     ...preferences,
+    setProjectsOpen: (value: boolean | ((previous: boolean) => boolean)) => setPreferences((previous) => {
+      const projectsOpen = typeof value === 'boolean' ? value : value(previous.projectsOpen);
+      return projectsOpen === previous.projectsOpen ? previous : { ...previous, projectsOpen };
+    }),
     setOpen: (value: boolean | ((previous: boolean) => boolean)) => setPreferences((previous) => {
       const open = typeof value === 'boolean' ? value : value(previous.open);
       return open === previous.open ? previous : { ...previous, open };

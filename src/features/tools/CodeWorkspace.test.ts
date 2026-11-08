@@ -55,12 +55,24 @@ describe('board code workspace', () => {
     expect(markup).not.toContain('<textarea');
     expect(markup).toContain('data-testid="board-context-header"');
   });
+  it('offers six ESP sections without a redundant Serial section or scope notes and leaves UNO navigation intact', () => {
+    const espMarkup = render(esp, program('esp', '// main')).markup;
+    expect(espMarkup.match(/data-testid="esp-code-tab-/g)).toHaveLength(6);
+    for (const label of ['Principal', 'WiFi', 'Funciones', 'Servidor web', 'HTML', 'Vista web']) expect(espMarkup).toContain(label);
+    expect(espMarkup).not.toContain('Monitor serie');
+    expect(espMarkup).not.toContain('Includes locales');
+    expect(espMarkup).not.toContain('WiFi, ESP8266WebServer y LittleFS simulados');
+    expect(espMarkup).not.toContain('esp-wifi-environment');
+    expect(espMarkup).not.toContain('esp-ap-');
+    expect(render(uno, program('uno', '// UNO')).markup).not.toContain('esp-code-tab-');
+  });
   it('explains saved main.ino execution and the supported GPIO subset without adding editor controls', () => {
     const { markup } = render(uno, undefined);
-    expect(markup).toContain('Al iniciar se ejecuta main.ino');
-    expect(markup).toContain('pinMode(INPUT/OUTPUT)');
-    expect(markup).toContain('Para aplicar cambios, detén e inicia de nuevo');
-    expect(markup).toContain('Sin C++ completo, otros archivos, digitalRead, UART ni WiFi');
+    expect(markup).toContain('Se ejecuta un subconjunto de Arduino');
+    expect(markup).toContain('WiFi, ESP8266WebServer y LittleFS simulados');
+    expect(markup).toContain('Detené y reiniciá para aplicar cambios');
+    expect(markup).toContain('no C++ completo');
+    expect(markup).toContain('sin WiFi real');
     expect(markup).toContain('sin hardware WiFi');
     expect(markup).toContain('data-testid="code-board-tab"');
     expect(markup).not.toContain('data-testid="firmware-run"');
