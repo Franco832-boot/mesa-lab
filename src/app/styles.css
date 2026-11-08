@@ -2543,6 +2543,17 @@ fieldset.terminal-picker {
 .project-library-intro { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .project-category { margin: 4px 0 9px; font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
 .project-card { padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 7px; background: #fcfbfe; }
+.project-card:is(.project-start-card, .contact-card) h3 { margin: 0 0 6px; font-size: 12px; line-height: 1.5; color: #615174; }
+.contact-card > a { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 32px; padding: 7px 9px; font-size: 10px; line-height: 1.5; text-align: center; text-decoration: none; white-space: normal; }
+.contact-card > a:focus-visible, .saved-projects summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.component-list > .contact-card { flex-shrink: 0; margin: 10px 0 0; }
+.saved-projects { margin-top: 10px; font-size: 10px; color: #615174; }
+.saved-projects summary { cursor: pointer; line-height: 1.6; }
+.saved-projects ul { list-style: none; padding: 0; margin: 8px 0; }
+.saved-projects li { border-top: 1px solid var(--border); }
+.saved-projects li > button { width: 100%; height: auto; min-height: 36px; padding: 7px 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.saved-projects small { color: var(--muted); font-size: 9px; }
+.saved-project-current { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; overflow-wrap: anywhere; }
 .project-card h4 { margin: 0; font-size: 12px; line-height: 1.5; color: #615174; }
 .project-card p { font-size: 11px; line-height: 1.6; color: var(--muted); margin: 6px 0; }
 .project-card-components { display: block; font-size: 10px; line-height: 1.6; color: #81788d; margin-bottom: 10px; }

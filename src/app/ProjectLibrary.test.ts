@@ -7,7 +7,7 @@ import { Application } from './Application';
 import { createAppStore } from './store';
 import { nameChanged } from '../features/project/projectSlice';
 import { EXAMPLE_BACKUP_PREFIX } from '../features/examples/replacement';
-import { parseProject, serializeProject } from '../model/project';
+import { createEmptyProject, parseProject, serializeProject } from '../model/project';
 import { projectExamples } from '../model/exampleProjects';
 
 let root: Root | undefined;
@@ -64,6 +64,93 @@ async function openProjects() {
 
 
 describe('independent project library and existing right tools', () => {
+  it('creates empty independent projects, reopens a saved circuit after reload and retains previous copies', async () => {
+    const current = await mount();
+    const original = serializeProject(current.store.getState().project.document);
+    await click(byId('create-project'));
+    const empty = current.store.getState().project.document;
+    expect(empty.id).not.toBe(parseProject(original).id);
+    expect(empty).toMatchObject({ components: [], wires: [], programs: [] });
+    expect(container.querySelectorAll('[data-reference]')).toHaveLength(0);
+    const originalKey = backups()[0] ?? '';
+    expect(localStorage.getItem(originalKey)).toBe(original);
+    await click(byId('add-resistor'));
+    await act(async () => { current.store.dispatch(nameChanged('My circuit')); await current.saveNow(); });
+    const authored = serializeProject(current.store.getState().project.document);
+    expect(parseProject(authored).components).toHaveLength(1);
+    await click(byId('create-project'));
+    const secondId = current.store.getState().project.document.id;
+    expect(secondId).not.toBe(empty.id);
+    await act(async () => { await current.saveNow(); });
+    await act(async () => root?.unmount()); current.persistor.pause(); await current.persistor.flush();
+    const reopenedApp = await mount();
+    expect(reopenedApp.store.getState().project.document.id).toBe(secondId);
+    await click('.saved-projects summary');
+    const key = backups().find((key) => parseProject(localStorage.getItem(key) ?? '').name === 'My circuit');
+    if (!key) throw new Error('Authored circuit was not preserved');
+    await click(`[data-copy-key="${key}"]`);
+    expect(serializeProject(reopenedApp.store.getState().project.document)).toBe(authored);
+    expect(localStorage.getItem(originalKey)).toBe(original);
+    expect(localStorage.getItem(key)).toBe(authored);
+    expect(container.querySelectorAll('[data-reference]')).toHaveLength(1);
+    expect(reopenedApp.store.getState().project.history.past).toHaveLength(0);
+    expect(errors).toEqual([]);
+  });
+  it.each(['create', 'reopen'] as const)('confirms unsaved changes before %s and preserves the latest source', async (action) => {
+    const savedKey = `${EXAMPLE_BACKUP_PREFIX}saved-circuit`;
+    localStorage.setItem(savedKey, serializeProject(createEmptyProject('Saved circuit', 'saved-circuit')));
+    const current = await mount(); current.persistor.pause();
+    await act(async () => { current.store.dispatch(nameChanged('Unsaved changes')); });
+    const before = current.store.getState().project.document;
+    const selector = action === 'create' ? byId('create-project') : `[data-copy-key="${savedKey}"]`;
+    await click(selector);
+    expect(container.querySelector('dialog[open]')).not.toBeNull();
+    expect(current.store.getState().project.document).toBe(before);
+    expect(backups()).toHaveLength(1);
+    await click('dialog .secondary-button');
+    expect(current.store.getState().project.document).toBe(before);
+    await click(selector);
+    await act(async () => { current.store.dispatch(nameChanged('Latest changes')); });
+    await click(byId('confirm-project'));
+    expect(current.store.getState().project.document.id).not.toBe(before.id);
+    if (action === 'reopen') expect(current.store.getState().project.document.id).toBe('saved-circuit');
+    expect(backups().map((key) => parseProject(localStorage.getItem(key) ?? '').name)).toContain('Latest changes');
+    expect(container.querySelector('dialog[open]')).toBeNull();
+  });
+  it('refuses to replace the active circuit when the local project copy cannot be written', async () => {
+    const current = await mount(); await click(byId('simulation-start'));
+    const before = current.store.getState().project.document;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+    await click(byId('create-project'));
+    expect(current.store.getState().project.document).toBe(before);
+    expect(control('simulation-status').getAttribute('data-status')).toBe('running');
+    expect(container.textContent).toContain('El espacio de trabajo actual sigue intacto');
+  });
+  it.each(['es', 'en'] as const)('keeps library order and email requests separate from component results in %s', async (locale) => {
+    localStorage.setItem('mesa.locale', locale); await mount();
+    const contents = element('.project-library-content');
+    expect(contents.firstElementChild?.getAttribute('data-testid')).toBe('create-project-card');
+    expect(contents.children[1]?.getAttribute('data-testid')).toBe('contact-project');
+    expect(contents.querySelectorAll('[data-testid^="example-"]')).toHaveLength(projectExamples.length);
+    const module = control('contact-module');
+    expect(module.parentElement?.lastElementChild).toBe(module);
+    expect(module.classList.contains('component-card')).toBe(false);
+    const initialCount = container.querySelectorAll('.component-card').length;
+    const boards = container.querySelectorAll('.category-tabs button')[1];
+    if (!(boards instanceof HTMLElement)) throw new Error('Missing category');
+    await act(async () => boards.click());
+    expect(container.querySelectorAll('.component-card').length).toBeLessThan(initialCount);
+    expect(control('contact-module')).toBe(module);
+    for (const kind of ['project', 'module']) {
+      const link = element(`[data-testid="contact-${kind}"] a`);
+      const href = link.getAttribute('href');
+      if (!href) throw new Error('Missing mailto');
+      const url = new URL(href);
+      expect(url.protocol).toBe('mailto:'); expect(url.pathname).toBe('franco.bettiol@gmail.com');
+      expect(url.searchParams.get('subject')).toContain('LosProfesParaVos');
+      expect(url.searchParams.get('body')).toContain('\r\n');
+    }
+  });
   it('uses the split-panel toolbar button for right tools only, preserves tabs and starts on Components', async () => {
     const current = await mount();
     const stage = container.querySelector('[data-testid="workspace-stage"]');

@@ -7,6 +7,7 @@ import type { CatalogEntry } from './catalog';
 import type { TranslationKey } from '../../locales/es/messages';
 import type { LedColor } from '../../model/components';
 import { ComponentThumbnail } from './ComponentArtwork';
+import { ContactCard } from '../contact/ContactCard';
 
 export function ComponentLibrary({
   embedded = false,
@@ -134,6 +135,7 @@ export function ComponentLibrary({
           </button>
         ))}
         {entries.length === 0 && <p className="empty-results">{t('noResults')}</p>}
+        <ContactCard kind="module" />
       </div>
       <div className="library-footer">
         <Icon name="info" size={16} />
