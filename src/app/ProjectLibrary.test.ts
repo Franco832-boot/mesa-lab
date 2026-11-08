@@ -57,11 +57,76 @@ function control(id: string) { return element(`[data-testid="${id}"]`); }
 async function click(selector: string) { await act(async () => element(selector).click()); }
 const byId = (id: string) => `[data-testid="${id}"]`;
 const backups = () => Object.keys(localStorage).filter((key) => key.startsWith(EXAMPLE_BACKUP_PREFIX));
+async function openProjects() {
+  if (control('project-library').hidden) await click(byId('library-toggle'));
+  expect(control('project-library').hidden).toBe(false);
+}
+
 
 describe('independent project library and existing right tools', () => {
+  it('uses the split-panel toolbar button for right tools only, preserves tabs and starts on Components', async () => {
+    const current = await mount();
+    const stage = container.querySelector('[data-testid="workspace-stage"]');
+    const original = serializeProject(current.store.getState().project.document);
+    const toggle = control('tools-toggle');
+    expect(toggle.hasAttribute('disabled')).toBe(false);
+    expect(toggle.getAttribute('aria-controls')).toBe('workspace-tools');
+    expect(toggle.getAttribute('aria-label')).toBe('Mostrar/Ocultar panel derecho');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(control('tool-tab-components').getAttribute('aria-selected')).toBe('true');
+    await click(byId('tools-toggle'));
+    expect(control('tool-sidebar').hidden).toBe(true);
+    expect(control('project-library').hidden).toBe(false);
+    expect(container.querySelector('#context-inspector')).toBeNull();
+    await click(byId('tools-toggle')); await click(byId('tool-tab-code'));
+    await click(byId('tools-toggle')); await click(byId('tools-toggle'));
+    expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
+    expect(control('tool-sidebar').hidden).toBe(false);
+    expect(container.querySelector('[data-testid="tool-tab-iot"]')).toBeNull();
+    await click(byId('tools-toggle')); await click(byId('sidebar-toggle'));
+    expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
+    await click(byId('tools-toggle'));
+    await click(byId('library-toggle')); await click(byId('library-toggle'));
+    expect(control('tool-sidebar').hidden).toBe(true);
+    expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('[data-testid="workspace-stage"]')).toBe(stage);
+    expect(serializeProject(current.store.getState().project.document)).toBe(original);
+    const preferences = localStorage.getItem('mesa.workspace.preferences.v1');
+    await act(async () => root?.unmount()); current.persistor.pause(); await current.persistor.flush();
+    await mount();
+    expect(control('tool-sidebar').hidden).toBe(true);
+    expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
+    expect(localStorage.getItem('mesa.workspace.preferences.v1')).toBe(preferences);
+  });
+  it.each([false, true])('keeps the Inspector independent from both right-panel toggles, mobile=%s', async (mobile) => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: mobile && query === '(max-width: 760px)', media: query,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
+    const current = await mount();
+    const uno = container.querySelector('[data-reference="uno-reference"]');
+    if (!(uno instanceof SVGElement)) throw new Error('Missing board');
+    const select = async () => { await act(async () => uno.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))); };
+    await select();
+    const inspector = element('#context-inspector');
+    const original = serializeProject(current.store.getState().project.document);
+    const closed = control('tool-sidebar').hidden;
+    await click(byId('tools-toggle'));
+    expect(control('tool-sidebar').hidden).toBe(!closed);
+    expect(container.querySelector('#context-inspector')).toBe(inspector);
+    await click(byId('sidebar-toggle'));
+    expect(control('tool-sidebar').hidden).toBe(closed);
+    expect(container.querySelector('#context-inspector')).toBe(inspector);
+    await click(byId('inspector-close'));
+    expect(container.querySelector('#context-inspector')).toBeNull();
+    await click(byId('tools-toggle'));
+    expect(container.querySelector('#context-inspector')).toBeNull();
+    await select();
+    expect(container.querySelector('#context-inspector')).not.toBeNull();
+    expect(control('project-library').hidden).toBe(false);
+    expect(serializeProject(current.store.getState().project.document)).toBe(original);
+  });
   it('configures the PCF address through the existing inspector and exposes LCD results without an editable text field', async () => {
     const current = await mount();
-    await click(byId('library-toggle')); await click(`${byId('example-lcd16-i2c')} button`);
+    await openProjects(); await click(`${byId('example-lcd16-i2c')} button`);
     const selectPart = async (id: string) => {
       const part = container.querySelector(`[data-reference="${id}"]`);
       if (!(part instanceof SVGElement)) throw new Error('Missing circuit part');
@@ -85,25 +150,79 @@ describe('independent project library and existing right tools', () => {
     await act(async () => { await current.saveNow(); });
     expect(parseProject(serializeProject(current.store.getState().project.document)).components.find((part) => part.kind === 'pcf8574')?.properties.address).toBe(63);
   });
-  it('routes the top-left button exclusively to projects and the purple arrow exclusively to right tools', async () => {
+  it('opens Projects on first entry and keeps folder, X and right arrow independent without changing the circuit', async () => {
     const current = await mount();
     const stage = container.querySelector('[data-testid="workspace-stage"]');
     const before = serializeProject(current.store.getState().project.document);
-    expect(control('project-library').hidden).toBe(true);
+    expect(control('project-library').hidden).toBe(false);
     expect(control('tool-sidebar').hidden).toBe(false);
-    expect(control('library-toggle').getAttribute('aria-label')).toBe('Mostrar/Ocultar proyectos');
     await click(byId('library-toggle'));
-    expect(control('project-library').hidden).toBe(false); expect(control('tool-sidebar').hidden).toBe(false);
+    expect(control('project-library').hidden).toBe(true); expect(control('tool-sidebar').hidden).toBe(false);
     await click(byId('sidebar-toggle'));
-    expect(control('tool-sidebar').hidden).toBe(true); expect(control('project-library').hidden).toBe(false);
+    expect(control('tool-sidebar').hidden).toBe(true); expect(control('project-library').hidden).toBe(true);
     await click(byId('library-toggle'));
+    expect(control('project-library').hidden).toBe(false); expect(control('tool-sidebar').hidden).toBe(true);
+    await click('#example-projects .tool-sidebar-heading button');
     expect(control('project-library').hidden).toBe(true); expect(control('tool-sidebar').hidden).toBe(true);
-    await click(byId('sidebar-toggle'));
-    expect(control('tool-sidebar').hidden).toBe(false); expect(control('project-library').hidden).toBe(true);
     expect(container.querySelector('[data-testid="workspace-stage"]')).toBe(stage);
     expect(serializeProject(current.store.getState().project.document)).toBe(before);
+    const preferences = localStorage.getItem('mesa.workspace.preferences.v1');
+    expect(preferences).toContain('"projectsOpen":false');
+    const writes = vi.spyOn(Storage.prototype, 'setItem');
+    await act(async () => root?.unmount()); current.persistor.pause(); await current.persistor.flush();
+    await mount();
+    expect(control('project-library').hidden).toBe(true); expect(control('tool-sidebar').hidden).toBe(true);
+    expect(localStorage.getItem('mesa.workspace.preferences.v1')).toBe(preferences);
+    expect(writes.mock.calls.filter(([key]) => key === 'mesa.workspace.preferences.v1')).toHaveLength(0);
     expect(container.querySelectorAll('aside#workspace-tools')).toHaveLength(1);
     expect(container.querySelectorAll('aside#example-projects')).toHaveLength(1);
+  });
+  it.each(['es', 'en'] as const)('opens the user guide in %s, closes it accessibly, and exposes no public roadmap', async (locale) => {
+    localStorage.setItem('mesa.locale', locale);
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 760px)', media: query,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
+    const current = await mount(), before = serializeProject(current.store.getState().project.document);
+    expect(container.textContent).not.toMatch(/roadmap|plan de desarrollo/i);
+    const help = element('.help-button'); help.focus();
+    await click('.help-button');
+    const dialog = element('dialog[open]');
+    expect(dialog.getAttribute('aria-label')).toBe(locale === 'es' ? 'Cómo usar Mesa Lab' : 'How to use Mesa Lab');
+    expect(dialog.querySelectorAll('.help-sections section')).toHaveLength(10);
+    expect(dialog.textContent).toContain('DHT11'); expect(dialog.textContent).toContain('PCF8574');
+    expect(dialog.textContent).toContain('Serial.println()');
+    expect(dialog.textContent).not.toMatch(/roadmap|plan de desarrollo|Monaco|MQTT/i);
+    expect(dialog.querySelector('.help-gestures')?.textContent).not.toContain(locale === 'es' ? 'botón +' : '+ button');
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })); });
+    expect(serializeProject(current.store.getState().project.document)).toBe(before);
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(control('tool-sidebar').hidden).toBe(false);
+    await act(async () => { dialog.dispatchEvent(new Event('cancel', { cancelable: true })); });
+    expect(container.querySelector('dialog[open]')).toBeNull(); expect(document.activeElement).toBe(help);
+    await click('.help-button'); await click('dialog .dialog-done');
+    expect(container.querySelector('dialog[open]')).toBeNull();
+    await click('.help-button'); await click('dialog .dialog-heading button');
+    expect(container.querySelector('dialog[open]')).toBeNull();
+    expect(control('project-library').hidden).toBe(false); expect(control('tool-sidebar').hidden).toBe(false);
+    expect(errors).toEqual([]);
+  });
+  it('removes only the unused toolbar mode and keeps selection tools, component add buttons and Shift selection', async () => {
+    await mount();
+    const toolbar = element('.editor-toolbar');
+    expect(toolbar.querySelector('path[d="M12 5v14M5 12h14"]')).toBeNull();
+    expect(control('add-resistor').querySelector('svg')).not.toBeNull();
+    const toolButtons = [...toolbar.querySelectorAll('button')].filter((button) => /\([VHC]\)/.test(button.getAttribute('aria-label') ?? ''));
+    expect(toolButtons.map((button) => button.getAttribute('aria-label'))).toEqual(['Seleccionar (V)', 'Desplazar mesa (H)', 'Conectar pines (C)']);
+    const selectPart = async (id: string, shiftKey = false) => {
+      const part = container.querySelector(`[data-reference="${id}"]`);
+      if (!(part instanceof SVGElement)) throw new Error('Missing part');
+      await act(async () => { part.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey, bubbles: true })); });
+      return part;
+    };
+    const uno = await selectPart('uno-reference');
+    const esp = await selectPart('esp-reference', true);
+    expect(uno.getAttribute('aria-pressed')).toBe('true'); expect(esp.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.next-card')).toBeNull();
+    expect(container.textContent).not.toMatch(/roadmap|plan de desarrollo/i);
   });
   it('retains right tab selection and component search while opening/closing projects and switching ES/EN', async () => {
     await mount();
@@ -112,7 +231,7 @@ describe('independent project library and existing right tools', () => {
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     await act(async () => { setValue?.call(search, 'led'); search.dispatchEvent(new Event('input', { bubbles: true })); });
     await click(byId('tool-tab-code'));
-    await click(byId('library-toggle'));
+    await openProjects();
     expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
     expect(search.value).toBe('led');
     const language = container.querySelector('.locale-picker select');
@@ -120,14 +239,15 @@ describe('independent project library and existing right tools', () => {
     await act(async () => { language.value = 'en'; language.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(control('library-toggle').getAttribute('title')).toBe('Show/Hide projects');
     expect(control('project-library').textContent).toContain('LED with a for loop');
-    expect(control('project-library').textContent).not.toContain('Communication');
+    expect(control('project-library').textContent).toContain('Communication');
+    expect(control('project-library').textContent).toContain('ESP8266 — LED control through a web server');
     expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
   });
   it.each(projectExamples)('loads $id as a fresh, stopped ordinary project with sketch and local backup', async (example) => {
     const current = await mount();
     const original = serializeProject(current.store.getState().project.document);
     await click(byId('simulation-start'));
-    await click(byId('library-toggle'));
+    await openProjects();
     await click(`${byId(`example-${example.id}`)} button`);
     const loaded = current.store.getState().project.document;
     expect(loaded.id).not.toBe(parseProject(original).id);
@@ -145,7 +265,7 @@ describe('independent project library and existing right tools', () => {
     const current = await mount(); current.persistor.pause();
     await act(async () => { current.store.dispatch(nameChanged('Unsaved lesson')); });
     const original = current.store.getState().project.document;
-    await click(byId('library-toggle'));
+    await openProjects();
     await click(`${byId('example-led-for')} button`);
     expect(container.querySelector('dialog[open]')).not.toBeNull();
     expect(current.store.getState().project.document).toBe(original);
@@ -163,7 +283,7 @@ describe('independent project library and existing right tools', () => {
     await click(byId('simulation-start'));
     const original = current.store.getState().project.document;
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
-    await click(byId('library-toggle'));
+    await openProjects();
     await click(`${byId('example-dht11')} button`);
     expect(current.store.getState().project.document).toBe(original);
     expect(control('simulation-status').getAttribute('data-status')).toBe('running');

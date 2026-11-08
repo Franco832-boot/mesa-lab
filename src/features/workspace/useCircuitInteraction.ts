@@ -47,7 +47,6 @@ interface InteractionProps {
   onViewportChange: (viewport: Viewport) => void;
   selectedIds: string[];
   tool: WorkspaceTool;
-  multiSelect: boolean;
   cancelEpoch: number;
   autoFit: boolean;
   stageRef: RefObject<HTMLDivElement | null>;
@@ -67,7 +66,6 @@ export function useCircuitInteraction(props: InteractionProps) {
     onViewportChange,
     selectedIds,
     tool,
-    multiSelect,
     cancelEpoch,
     stageRef,
     execute,
@@ -209,7 +207,7 @@ export function useCircuitInteraction(props: InteractionProps) {
       return;
     }
     if (component) {
-      const additive = event.shiftKey || event.ctrlKey || event.metaKey || multiSelect;
+      const additive = event.shiftKey || event.ctrlKey || event.metaKey;
       onSelectComponent(component, additive);
       if (additive) return;
       const ids = selectedIds.includes(component) ? selectedIds : [component];

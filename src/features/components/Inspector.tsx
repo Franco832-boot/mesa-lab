@@ -21,7 +21,6 @@ interface InspectorProps {
   component?: ElectronicComponent;
   selectedCount: number;
   onClose: () => void;
-  onRoadmap: () => void;
   onUpdate: (update: ComponentPropertyUpdate) => void;
   onRotate: () => void;
   onDuplicate: () => void;
@@ -36,7 +35,6 @@ export function Inspector({
   component,
   selectedCount,
   onClose,
-  onRoadmap,
   onUpdate,
   onRotate,
   onDuplicate,
@@ -146,6 +144,7 @@ export function Inspector({
         {isBoard && tab === 'pinout' ? (
           <div className="pinout-content">
             {isEsp && <p>{t('gpioNote')}</p>}
+            {isEsp && component && <SimulationProperties component={component} simulation={simulation} gpioOnly />}
             <table>
               <thead>
                 <tr>
@@ -203,11 +202,11 @@ export function Inspector({
             {!component && <p className="inspector-hint">{t('selectToEdit')}</p>}
           </>
         )}
-        {compact && <button type="button" className="inspector-more text-button" data-testid="inspector-more"
+        {!isEsp && compact && <button type="button" className="inspector-more text-button" data-testid="inspector-more"
           aria-expanded={advanced} aria-controls="inspector-advanced" onClick={() => setAdvanced((value) => !value)}>
           {t('inspectorMore')} <Icon name={advanced ? 'minus' : 'plus'} size={14} />
         </button>}
-        <div id="inspector-advanced" hidden={compact && !advanced}>
+        {!isEsp && <div id="inspector-advanced" hidden={compact && !advanced}>
         {component && (
           <div className="terminal-picker">
             <label htmlFor="inspector-pin">{t('exactPin')}</label>
@@ -264,19 +263,7 @@ export function Inspector({
           </div>
         </div>
         {isEsp && <p className="voltage-note">{t('voltageNote')}</p>}
-      <div className="next-card">
-        <span className="eyebrow">
-          {t('comingNext')}
-          <span className="small-tag">{t('phase5')}</span>
-        </span>
-        <h3>{t('nextTitle')}</h3>
-        <p>{t('nextDescription')}</p>
-        <button onClick={onRoadmap}>
-          {t('roadmap')}
-          <Icon name="arrow" size={15} />
-        </button>
-      </div>
-        </div>
+        </div>}
         </div>
       </div>
     </aside>

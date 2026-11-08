@@ -75,6 +75,7 @@ export async function openFixture(browser, t, document, {
   page.on('pageerror', (error) => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'Uncaught browser errors'); });
   await page.addInitScript(({ document, locale }) => {
+    if (window !== window.top) return; // Project fixtures belong only to the app, never sandbox frames.
     // Seed only public storage; never access Redux internals or inject engine results.
     // Preserve subsequent saves when the test reloads this same tab.
     if (sessionStorage.getItem('mesa.browser.seeded') !== '1') {

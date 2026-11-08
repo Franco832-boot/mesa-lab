@@ -8,6 +8,11 @@ import type {
 import type { UnoErrorCode } from '../../firmware/uno';
 
 export const firmwareErrorMessages: Record<UnoErrorCode, TranslationKey> = {
+  'wifi-disconnected': 'firmwareWifiDisconnected',
+  'indeterminate-read': 'firmwareIndeterminateRead',
+  'missing-file': 'firmwareMissingFile',
+  'include-cycle': 'firmwareIncludeCycle',
+  'http-handler-limit': 'firmwareHttpLimit',
   'unsupported-syntax': 'firmwareSyntaxError',
   'invalid-value': 'firmwareValueError',
   'source-limit': 'firmwareSourceLimit',

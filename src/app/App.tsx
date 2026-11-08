@@ -25,7 +25,6 @@ import { preserveBeforeExample } from '../features/examples/replacement';
 import { useWorkspaceTools } from '../features/tools/useWorkspaceTools';
 import { useBoardContext } from '../features/tools/useBoardContext';
 import { CodeWorkspace } from '../features/tools/CodeWorkspace';
-import { IotWorkspace } from '../features/tools/IotWorkspace';
 import { Workspace } from '../features/workspace/Workspace';
 import { useSimulation } from '../features/simulation/useSimulation';
 import { ownInput } from '../sim/topology';
@@ -53,7 +52,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const tools = useWorkspaceTools();
   const libraryOpen = tools.open;
   const setLibraryOpen = tools.setOpen;
-  const [projectsOpen, setProjectsOpen] = useState(false);
+  const { projectsOpen, setProjectsOpen } = tools;
+  const [webRevealSequence, setWebRevealSequence] = useState(0);
   const [pendingExample, setPendingExample] = useState<ExampleId | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const toolTab = tools.tab;
@@ -168,7 +168,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         setMenuOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
       setMenuOpen(false);
       setInspectorOpen(false);
       if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
@@ -182,7 +182,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   }, []);
   const toggleLibrary = () => {
     setLibraryOpen((previous) => !previous);
-    if (window.matchMedia('(max-width: 760px)').matches) setInspectorOpen(false);
   };
   const closeProjects = () => {
     setProjectsOpen(false);
@@ -190,15 +189,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   };
   const focusToolsToggle = () => requestAnimationFrame(() =>
     document.querySelector<HTMLButtonElement>('[data-testid="sidebar-toggle"]')?.focus({ preventScroll: true }));
-  const toggleInspector = () => {
-    if (!selectedComponent && !selectedWire) return;
-    setInspectorOpen((previous) => !previous);
-    if (!inspectorVisible)
-      requestAnimationFrame(() =>
-        document.getElementById('context-inspector')?.focus({ preventScroll: true }),
-      );
-    if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
-  };
   const addAt = (kind: ComponentKind, center: Point, color?: LedColor) => {
     if (locked) return;
     const definition = componentDefinitions[kind];
@@ -357,7 +347,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
               {...(inspectedComponent ? { component: inspectedComponent } : {})}
               selectedCount={editor.selection.components.length}
               onClose={close}
-              onRoadmap={() => setHelpOpen(true)}
               onUpdate={(update) => {
                 if (selectedComponent)
                   editor.execute({ type: 'properties', id: selectedComponent.id, update });
@@ -439,6 +428,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           <span className="header-action-divider" />
           <button
             className="save-button"
+            aria-label={t('save')}
             onClick={() => {
               void saveNow().then((success) => setNotice(success ? 'saveSuccess' : 'saveError'));
             }}
@@ -603,15 +593,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 </button>
               ))}
               <button
-                className={`icon-button ${editor.multiSelect ? 'active-subtle' : ''}`}
-                onClick={() => editor.setMultiSelect((value) => !value)}
-                aria-label={t('multiSelect')}
-                title={t('multiSelect')}
-                aria-pressed={editor.multiSelect}
-              >
-                <Icon name="plus" />
-              </button>
-              <button
                 className="icon-button"
                 onClick={editor.rotate}
                 disabled={locked || !editor.selection.components.length}
@@ -669,15 +650,14 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             <div className="tool-group">
               <span className="toolbar-label">{t('workspace')}</span>
               <button
-                className={`icon-button ${inspectorVisible ? 'active-subtle' : ''}`}
-                title={t('showProperties')}
-                aria-label={t('showProperties')}
-                aria-pressed={inspectorVisible}
-                aria-expanded={inspectorVisible}
-                aria-controls="context-inspector"
-                disabled={!selectedComponent && !selectedWire}
-                data-testid="inspector-toggle"
-                onClick={toggleInspector}
+                className={`icon-button ${libraryOpen ? 'active-subtle' : ''}`}
+                title={t('toggleRightPanel')}
+                aria-label={t('toggleRightPanel')}
+                aria-pressed={libraryOpen}
+                aria-expanded={libraryOpen}
+                aria-controls="workspace-tools"
+                data-testid="tools-toggle"
+                onClick={toggleLibrary}
               >
                 <Icon name="inspector" />
               </button>
@@ -710,7 +690,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             execute={editor.execute}
             stageRef={stageRef}
             tool={tool}
-            multiSelect={editor.multiSelect}
             cancelEpoch={editor.cancelEpoch}
             autoFit={fitOnMount}
             grid={grid}
@@ -726,12 +705,14 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             locked={locked}
             diagnostics={simulation.snapshot?.diagnostics ?? null}
             firmware={simulation.firmware}
+            onClearSerial={simulation.clearSerial}
             initialIssue={initialIssue}
             components={project.components}
             onNavigate={navigateDiagnostic}
           />
         </main>
         <ToolSidebar
+          expandSequence={webRevealSequence}
           canvasRef={stageRef}
           canvasVersion={`${project.id}-${revision}`}
           onDockChange={setToolDockOffset}
@@ -768,6 +749,18 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             ),
             code: (
               <CodeWorkspace
+                web={boardContext.activeBoard?.kind === 'esp8266' ? {
+                  session: simulation.firmware[boardContext.activeBoard.id]?.session,
+                  execution: simulation.firmware[boardContext.activeBoard.id]?.execution ?? null,
+                  running: simulation.status === 'running',
+                  request: (path) => simulation.requestFirmwareHttp(boardContext.activeBoard?.id ?? '', path, simulation.firmware[boardContext.activeBoard?.id ?? '']?.session),
+                } : undefined}
+                onRevealWeb={() => { setToolTab('code'); setLibraryOpen(true); setWebRevealSequence((value) => value + 1); }}
+                onOpenMonitor={() => {
+                  setConsoleOpen(true);
+                  const id = boardContext.activeBoard?.id;
+                  requestAnimationFrame(() => document.getElementById(`serial-${encodeURIComponent(id ?? '')}`)?.focus());
+                }}
                 boards={boardContext.boards}
                 activeBoard={boardContext.activeBoard}
                 program={project.programs.find(
@@ -775,7 +768,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 )}
                 saveStatus={saveStatus}
                 onClose={() => {
-                  setToolTab('components');
+                  setLibraryOpen(false);
                   focusToolsToggle();
                 }}
                 onSelectBoard={boardContext.selectBoard}
@@ -794,16 +787,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 }}
               />
             ),
-            iot: (
-              <IotWorkspace
-                key={`${project.id}-${revision}`}
-                boards={boardContext.boards}
-                activeBoard={boardContext.activeBoard}
-                onSelectBoard={boardContext.selectBoard}
-                simulation={simulation}
-                onConfig={(id, config) => editor.execute({ type: 'network', id, config })}
-              />
-            ),
+
           }}
         />
       </div>
@@ -815,11 +799,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         </span>
         <span className="footer-version">
           {t('previewVersion')}
-          <span>·</span>
-          <button onClick={() => setHelpOpen(true)}>
-            {t('roadmap')}
-            <Icon name="arrow" size={12} />
-          </button>
         </span>
         <label className="locale-picker">
           <Icon name="globe" size={13} />

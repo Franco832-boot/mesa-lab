@@ -1,6 +1,8 @@
+import type { HttpResponse } from '../../firmware/http';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CircuitProject, GpioState } from '../../model/types';
 import type { VirtualHttpRequest } from '../../sim/network';
+import type { FirmwareSession } from './firmwareRuntime';
 import { nextFirmwareSlice } from './firmwareRuntime';
 import {
   initialSimulation,
@@ -11,7 +13,9 @@ import {
 import type { SimulationEvent, SimulationState } from './runtime';
 
 export interface SimulationController extends SimulationState {
+  requestFirmwareHttp(componentId: string, path: string, session?: FirmwareSession): HttpResponse;
   runFirmware(componentId: string, source: string): void;
+  clearSerial(componentId: string): void;
   stopFirmware(componentId: string): void;
   start(): void;
   pause(): void;
@@ -92,7 +96,12 @@ export function useSimulation(
   }, [currentStamp]);
   return {
     ...state,
+    requestFirmwareHttp: (componentId, path, session) => {
+      send({ ...(session ? { session } : {}), type: 'firmware-http', componentId, path });
+      return latest.current.firmware[componentId]?.httpResponse ?? { status: 503, contentType: 'text/plain', body: '503' };
+    },
     runFirmware: (componentId, source) => send({ type: 'firmware-run', componentId, source }),
+    clearSerial: (componentId) => send({ type: 'firmware-clear-serial', componentId }),
     stopFirmware: (componentId) => send({ type: 'firmware-stop', componentId }),
     start: () => send({ type: 'start' }),
     pause: () => send({ type: 'pause' }),

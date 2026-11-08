@@ -6,9 +6,10 @@ import { clampSidebarWidth, sidebarWidthLimits } from './preferences';
 /** Shared panel shell. Tool-specific tabs and project cards stay in their owners. */
 export function WorkspaceSidebar({ open, onClose, onToggle, header, children, width = 300,
   onWidth = () => undefined, canvasRef, canvasVersion, onDockChange, side = 'right', id, label,
-  resizeLabel, expandLabel, toggleLabel, testId, controlPrefix = 'sidebar',
+  resizeLabel, expandLabel, toggleLabel, testId, controlPrefix = 'sidebar', expandSequence = 0,
 }: {
   open: boolean; onClose: () => void; onToggle?: () => void; header: ReactNode; children: ReactNode;
+  expandSequence?: number | undefined;
   width?: number; onWidth?: (width: number) => void; side?: 'left' | 'right';
   canvasRef?: RefObject<HTMLDivElement | null>; onDockChange?: (offset: number) => void;
   canvasVersion?: string;
@@ -22,6 +23,7 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
   const [resizing, setResizing] = useState<number | null>(null);
   const [bottomInset, setBottomInset] = useState(0);
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  useEffect(() => { if (expandSequence > 0 && window.innerWidth <= 760) setMobileExpanded(true); }, [expandSequence]);
   const gesture = useRef<{ pointerId: number; x: number; width: number; current: number } | null>(null);
   useEffect(() => {
     const resize = () => setAvailable(window.innerWidth);

@@ -1,9 +1,9 @@
 import type { ToolTab } from './types';
 import { toolTabs } from './types';
 export const WORKSPACE_PREFERENCES_KEY = 'mesa.workspace.preferences.v1';
-export interface WorkspacePreferences { open: boolean; tab: ToolTab; widths: Record<ToolTab, number> }
+export interface WorkspacePreferences { open: boolean; projectsOpen: boolean; tab: ToolTab; widths: Record<ToolTab, number> }
 export const defaultWorkspacePreferences = (): WorkspacePreferences => ({
-  open: true, tab: 'components', widths: { components: 300, code: 480, iot: 420 },
+  open: true, projectsOpen: true, tab: 'components', widths: { components: 300, code: 480 },
 });
 export function decodeWorkspacePreferences(source: string | null): WorkspacePreferences {
   const fallback = defaultWorkspacePreferences();
@@ -12,7 +12,8 @@ export function decodeWorkspacePreferences(source: string | null): WorkspacePref
     const value: unknown = JSON.parse(source);
     if (typeof value !== 'object' || value === null) return fallback;
     if ('open' in value && typeof value.open === 'boolean') fallback.open = value.open;
-    if ('tab' in value) fallback.tab = toolTabs.find((tab) => tab === value.tab) ?? fallback.tab;
+    if ('projectsOpen' in value && typeof value.projectsOpen === 'boolean') fallback.projectsOpen = value.projectsOpen;
+    if ('tab' in value) fallback.tab = value.tab === 'iot' ? 'code' : toolTabs.find((tab) => tab === value.tab) ?? fallback.tab;
     if ('widths' in value && typeof value.widths === 'object' && value.widths !== null) {
       for (const tab of toolTabs) {
         const widths = value.widths;

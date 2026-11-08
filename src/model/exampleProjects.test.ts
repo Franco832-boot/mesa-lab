@@ -1,3 +1,5 @@
+import { compileProjectFiles } from '../firmware/projectCompiler';
+import { sourceFiles } from './programFiles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createExampleProject, projectExamples, availableExampleCategories } from './exampleProjects';
@@ -13,7 +15,7 @@ import { componentDefinitions } from './components';
 import { phase1Source } from '../test/phase1';
 
 function start(project: CircuitProject, source = project.programs[0]?.source ?? '') {
-  return transitionSimulation(initialSimulation(), { type: 'firmware-run', componentId: 'uno', source }, project);
+  return transitionSimulation(initialSimulation(), { type: 'firmware-run', componentId: project.programs[0]?.componentId ?? 'uno', source }, project);
 }
 function advance(state: SimulationState, project: CircuitProject, elapsedMs: number) {
   let next = transitionSimulation(state, { type: 'firmware-advance', elapsedMs }, project);
@@ -32,8 +34,9 @@ describe('ordinary v1 educational project templates', () => {
     expect(project.components.find((part) => part.kind === 'breadboard')).toBeDefined();
     for (const part of project.components.filter((part) => canInsert(part.kind))) expect(part.attachments).toHaveLength(componentDefinitions[part.kind].pins.length);
     expect(parseProject(serializeProject(project))).toEqual(project);
-    expect(() => compileArduinoSubset(project.programs[0]?.source ?? '')).not.toThrow();
-    expect(start(project).firmware.uno?.error).toBeNull();
+    if (example.id === 'esp-web-led') expect(() => compileProjectFiles(sourceFiles(project.programs[0]), 'esp8266')).not.toThrow();
+    else expect(() => compileArduinoSubset(project.programs[0]?.source ?? '')).not.toThrow();
+    expect(start(project).firmware[project.programs[0]?.componentId ?? 'uno']?.error).toBeNull();
   });
   it('keeps template instances independent and old project documents compatible', () => {
     const first = createExampleProject('dht11', 'First');
@@ -42,7 +45,7 @@ describe('ordinary v1 educational project templates', () => {
     first.wires.splice(0); first.components[0] && (first.components[0].position.x = 999);
     expect(second.wires).toHaveLength(3);
     expect(second.components[0]?.position.x).toBe(80);
-    expect(availableExampleCategories).toEqual(['sensors', 'basics', 'displays']);
+    expect(availableExampleCategories).toEqual(['communication', 'sensors', 'basics', 'displays']);
     expect(parseProject(serializeProject(parseProject(phase1Source)))).toEqual(parseProject(phase1Source));
   });
   it('reuses the existing millis sketch and drives the actual LED at exact virtual second boundaries', () => {

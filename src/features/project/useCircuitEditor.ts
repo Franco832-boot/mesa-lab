@@ -12,7 +12,6 @@ export function useCircuitEditor(project: CircuitProject, onError: () => void, l
     wire: null,
   });
   const [tool, setTool] = useState<WorkspaceTool>('select');
-  const [multiSelect, setMultiSelect] = useState(false);
   const [cancelEpoch, setCancelEpoch] = useState(0);
   const execute = useCallback(
     (command: EditorCommand): boolean => {
@@ -134,8 +133,6 @@ export function useCircuitEditor(project: CircuitProject, onError: () => void, l
     selection,
     tool,
     setTool,
-    multiSelect,
-    setMultiSelect,
     cancelEpoch,
     execute,
     clearSelection,

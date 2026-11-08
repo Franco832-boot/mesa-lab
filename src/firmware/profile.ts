@@ -9,6 +9,10 @@ import type { Value } from './values';
 export function constantValue(token: string, board: BoardKind, at: SourceSpan): Value | null {
   const number = integerLiteral(token, board, at);
   if (number) return number;
+  if (board === 'esp8266') {
+    const statuses: Readonly<Record<string, number>> = { WL_CONNECTED: 3, WL_CONNECT_FAILED: 4, WL_DISCONNECTED: 6 };
+    if (Object.hasOwn(statuses, token)) return { type: 'int', value: statuses[token] ?? 6 };
+  }
   if (token === 'DHT11') return { type: 'int', value: 11 };
   if (token === 'NAN') return { type: 'float', value: NaN };
   if (token === 'true' || token === 'false') return { type: 'bool', value: Number(token === 'true') };

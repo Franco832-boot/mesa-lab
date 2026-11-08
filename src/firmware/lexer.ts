@@ -4,13 +4,13 @@ import { LIBRARIES } from './libraries';
 const supportedHeaders = new Set(['Arduino.h', ...Object.values(LIBRARIES).flatMap((library) => library.header ? [library.header] : [])]);
 
 export interface Token {
-  kind: 'name' | 'number' | 'string' | 'header' | 'define' | 'symbol' | 'end';
+  kind: 'name' | 'number' | 'string' | 'header' | 'include' | 'define' | 'symbol' | 'end';
   text: string;
   at: SourceSpan;
 }
 
 /** Regexes recognize individual lexical tokens only; grammar lives in parser.ts. */
-export function tokenize(source: string): readonly Token[] {
+export function tokenize(source: string, file?: string, localIncludes = false): readonly Token[] {
   if (typeof source !== 'string' || source.length > MAX_SOURCE_LENGTH) fail('source-limit');
   // C++ preprocessing splices lines before stripping comments. Until a complete
   // preprocessor exists, reject splicing everywhere rather than executing a
@@ -28,7 +28,7 @@ export function tokenize(source: string): readonly Token[] {
     }
   };
   while (offset < source.length) {
-    const at = { offset, line, column };
+    const at = { offset, line, column, ...(file ? { file } : {}) };
     const rest = source.slice(offset);
     const whitespace = /^\s+/.exec(rest);
     if (whitespace) { consume(whitespace[0].length); continue; }
@@ -44,9 +44,14 @@ export function tokenize(source: string): readonly Token[] {
       continue;
     }
     if (rest[0] === '#') {
-      const include = /^#[ \t]*include[ \t]*(?:<([A-Za-z_][A-Za-z_0-9.]*)>|"([A-Za-z_][A-Za-z_0-9.]*)")[^\S\r\n]*(?:\r?\n|$)/.exec(rest);
+      const include = /^#[ \t]*include[ \t]*(?:<([A-Za-z_][A-Za-z_0-9.-]*)>|"([A-Za-z_][A-Za-z_0-9.-]*)")[^\S\r\n]*(?:\r?\n|$)/.exec(rest);
       const define = /^#[ \t]*define[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]+([A-Za-z_][A-Za-z_0-9]*|(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\.[0-9]+)?)(?:[uU][lL]|[lL])?)[ \t]*(?:\/\/[^\r\n]*)?(?:\r?\n|$)/.exec(rest);
       const header = include?.[1] ?? include?.[2];
+      const once = /^#[ \t]*pragma[ \t]+once[^\S\r\n]*(?:\r?\n|$)/.exec(rest);
+      if (localIncludes && once) { consume(once[0].length); continue; }
+      if (localIncludes && include?.[2] && !supportedHeaders.has(header ?? '')) {
+        tokens.push({ kind: 'include', text: include[2], at }); consume(include[0].length); continue;
+      }
       if (include && header && supportedHeaders.has(header)) { tokens.push({ kind: 'header', text: header, at }); consume(include[0].length); continue; }
       if (define?.[1] && define[2]) { tokens.push({ kind: 'define', text: `${define[1]} ${define[2]}`, at }); consume(define[0].length); continue; }
       fail('unsupported-syntax', at);

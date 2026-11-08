@@ -72,7 +72,7 @@ export function evaluateGpio(project: CircuitProject, topology: ElectricalTopolo
         pins.set(key, voltage === undefined ? { logic } : { voltage, logic });
         if (voltage === undefined && topology.connectedPins.has(key)) diagnostics.push({ code: 'floating-node', severity: 'warning', componentIds: [component.id], pinIds: [pin.id] });
         if (voltage !== undefined && (voltage > nominal + 0.3 || voltage < -0.3)) diagnostics.push({ code: 'gpio-overvoltage', severity: 'warning', componentIds: [component.id], pinIds: [pin.id] });
-        if (pin.bootLevel) diagnostics.push({ code: 'boot-sensitive-pin', severity: voltage !== undefined && logic !== 'UNDEFINED' && logic !== pin.bootLevel ? 'warning' : 'info', componentIds: [component.id], pinIds: [pin.id] });
+        if (pin.bootLevel && voltage !== undefined && (logic === 'HIGH' || logic === 'LOW') && logic !== pin.bootLevel) diagnostics.push({ code: 'boot-sensitive-pin', severity: 'warning', componentIds: [component.id], pinIds: [pin.id] });
       } else if (topology.connectedPins.has(key) && pin.electricalType !== 'ground' && !['5V', 'ICSP-5V', 'IOREF', '3V3', '3V3-2', '3V3-3'].includes(pin.id)) {
         diagnostics.push({ code: 'unsupported-pin', severity: 'warning', componentIds: [component.id], pinIds: [pin.id] });
       }

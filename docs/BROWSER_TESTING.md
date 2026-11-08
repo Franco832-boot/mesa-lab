@@ -2,6 +2,8 @@
 
 ## Status in this implementation environment
 
+2026-11-07 update: focused checks can execute with approved execution outside the restricted sandbox. The ESP8266 Phase 2A editor suite passed 6/6 Chrome cases, and the existing UNO Blink browser regression passed 1/1. See [the exact scope and failed/repeated validations](ESP8266_EDITOR_PHASE2A.md). The full browser suite and screenshot baselines have not been validated. The restrictions described below refer to the earlier sandbox attempts, not to these later approved focused runs.
+
 Browser checks are authored but cannot execute here. Node child-process execution is also restricted (`spawnSync ... EPERM`), so the standard Node test worker may fail before running its setup hook. Vite cannot bind a loopback port (`listen EPERM`); independently launching installed Chrome through cached Playwright exits with `SIGTRAP` after crashpad reports `setsockopt: Operation not permitted`. These are failed environment validations, not passing browser tests. No screenshots have been reviewed or approved. Numerical, state integration and server-rendered SVG tests do not substitute for browser, touch or responsive verification.
 
 ## Runner
@@ -96,3 +98,15 @@ node --test --test-concurrency=1 tests/browser/workspace.test.mjs
 ```
 
 No workspace screenshots or approved baselines were created. Native panel sizing, responsive layout, focus behavior and visual layering remain pending real-browser validation despite the authored assertions.
+
+## ESP8266 Phase 2B (current behavior)
+
+The earlier IoT-panel scenarios above are historical: Control IoT and its exclusive UI are retired. Current requests originate in firmware-backed HTML, and old UI preferences for `iot` select Code. Shared network-domain tests and saved network metadata remain compatible.
+
+`esp-web.test.mjs` covers the complete ordinary library project: arbitrary SSID/password edits, real emulated connection and actual firmware Serial, named C++ routes, served CSS/JS, solver-calculated D5 LED brightness, OFF, pause/stop/restart, save/reload, ES/EN at 1440/390 pixels, close/reopen, stale page-token rejection, missing credentials, server-not-started gating, local GET forms/links and the simplified ESP Inspector. Its isolation probe attempts external fetch via the Worker prototype, native XMLHttpRequest and resource-bearing markup, while requiring zero external request-attempt events. Native capabilities are sealed before project code; CSP is an additional boundary.
+
+`esp-code.test.mjs` retains file CRUD, board isolation, keyboard navigation, persistence and undo/redo coverage. Its Serial mini-tab now opens the one bottom monitor; it checks per-board clear and Stop instead of expecting an inline duplicate. Fixture storage initialization runs only in the top-level application window so the harness does not access sessionStorage inside sandbox frames.
+
+`firmware-regressions.test.mjs` reads the actual wired DHT11 sketch and verifies bottom-monitor output, clear/continued readings and Stop. It also verifies that preceding firmware Serial survives an invalid disconnected localIP call while the simulator diagnostic remains separate. Selected workspace/project regressions cover source-driven UNO Blink, board context and desktop/mobile panel tab retention without IoT.
+
+See [Phase 2B architecture and executed results](ESP8266_PHASE2B.md) for final counts, failures and limitations. Full cross-browser coverage, physical-device interaction and screenshot-baseline approval are not implied by these focused Chrome checks.

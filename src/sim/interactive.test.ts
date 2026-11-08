@@ -91,7 +91,8 @@ describe('interactive electrical models', () => {
   it('uses the documented ESP mapping and reports boot-sensitive restrictions', () => {
     expect(espGpioMap.map((pin) => pin.gpio)).toEqual([16, 5, 4, 0, 2, 14, 12, 13, 15]);
     const project = circuit([piece('esp8266', 'b')], []);
-    expect(evaluateCircuit(project).diagnostics.filter((issue) => issue.code === 'boot-sensitive-pin').map((issue) => issue.pinIds[0]).sort()).toEqual(['D3', 'D4', 'D8']);
+    expect(evaluateCircuit(project).diagnostics.filter((issue) => issue.code === 'boot-sensitive-pin')).toEqual([]);
+    expect(evaluateCircuit(project, { gpio: { [pinKey('b', 'D5')]: { mode: 'output', level: 'HIGH' } } }).diagnostics.filter((issue) => issue.code === 'boot-sensitive-pin')).toEqual([]);
     const wrong = evaluateCircuit(project, { gpio: { [pinKey('b', 'D3')]: { mode: 'output', level: 'LOW' } } });
     expect(wrong.diagnostics).toContainEqual({ code: 'boot-sensitive-pin', severity: 'warning', componentIds: ['b'], pinIds: ['D3'] });
   });

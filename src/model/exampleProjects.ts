@@ -1,3 +1,4 @@
+import { espWebExampleFiles } from './espWebExample';
 import dhtSource from '../../examples/arduino/dht11-project.ino?raw';
 import millisSource from '../../examples/arduino/blink-without-delay.ino?raw';
 import forSource from '../../examples/arduino/led-for.ino?raw';
@@ -10,7 +11,7 @@ import { createProject, parseProject } from './project';
 import type { CircuitProject, ComponentKind, ElectronicComponent, Wire } from './types';
 
 export type ExampleCategory = 'basics' | 'sensors' | 'displays' | 'communication';
-export type ExampleId = 'dht11' | 'led-millis' | 'led-for' | LcdExampleId;
+export type ExampleId = 'dht11' | 'led-millis' | 'led-for' | 'esp-web-led' | LcdExampleId;
 export interface ProjectExample {
   readonly id: ExampleId;
   readonly name: TranslationKey;
@@ -23,6 +24,7 @@ export const exampleCategoryLabels: Readonly<Record<ExampleCategory, Translation
   displays: 'exampleCategoryDisplays', communication: 'exampleCategoryCommunication',
 };
 export const projectExamples = [
+  { id: 'esp-web-led', name: 'exampleEspWebName', description: 'exampleEspWebDescription', category: 'communication', components: ['esp8266', 'breadboard', 'led', 'resistor'] },
   { id: 'dht11', name: 'exampleDhtName', description: 'exampleDhtDescription', category: 'sensors', components: ['arduino-uno', 'breadboard', 'dht11'] },
   { id: 'led-millis', name: 'exampleMillisName', description: 'exampleMillisDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'led', 'resistor'] },
   { id: 'led-for', name: 'exampleForName', description: 'exampleForDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'led', 'resistor'] },
@@ -43,7 +45,7 @@ function wire(id: string, pinId: string, holeId: string, color: string): Wire {
 export function createExampleProject(id: ExampleId, name: string, projectId = newId()): CircuitProject {
   if (id === 'lcd16-parallel' || id === 'lcd20-parallel' || id === 'lcd16-i2c' || id === 'lcd20-i2c') return createLcdExample(id, name, projectId);
   const components: ElectronicComponent[] = [
-    createComponent('arduino-uno', { x: 80, y: 60 }, 'uno'),
+    createComponent(id === 'esp-web-led' ? 'esp8266' : 'arduino-uno', { x: 80, y: 60 }, id === 'esp-web-led' ? 'esp' : 'uno'),
     createComponent('breadboard', { x: 50, y: 350 }, 'breadboard'),
   ];
   let wires: Wire[];
@@ -53,9 +55,15 @@ export function createExampleProject(id: ExampleId, name: string, projectId = ne
   } else {
     components.push(mount(components, 'resistor', 'resistor', 'b29'));
     components.push(mount(components, 'led', 'led', 'c33'));
+    if (id === 'esp-web-led') {
+      const resistor = components.find((part) => part.kind === 'resistor');
+      if (resistor?.kind === 'resistor') resistor.properties.resistance = 220;
+    }
     // Resistor b29→b33 and LED c33→c34 share column 33, physically in series.
-    wires = [wire('led-signal', id === 'led-millis' ? 'D13' : 'D8', 'a29', '#668c75'), wire('led-ground', 'GND', 'a34', '#525b69')];
+    wires = [wire('led-signal', id === 'esp-web-led' ? 'D5' : id === 'led-millis' ? 'D13' : 'D8', 'a29', '#668c75'), wire('led-ground', 'GND', 'a34', '#525b69')];
   }
+  if (id === 'esp-web-led') wires = wires.map((item) => ({ ...item, from: { ...item.from, componentId: 'esp' } }));
+  const files = id === 'esp-web-led' ? espWebExampleFiles() : undefined;
   return parseProject(JSON.stringify({ ...createProject(projectId), name, components, wires,
-    programs: [{ componentId: 'uno', language: 'arduino-cpp', execution: 'unavailable', source: sketches[id] }] }));
+    programs: [{ componentId: id === 'esp-web-led' ? 'esp' : 'uno', language: 'arduino-cpp', execution: 'unavailable', source: id === 'esp-web-led' ? files?.[0]?.source ?? '' : sketches[id], ...(files ? { files, activeFile: 'main.ino' } : {}) }] }));
 }

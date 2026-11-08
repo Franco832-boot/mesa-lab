@@ -1,9 +1,15 @@
+import { beginWifi, initialWifi } from './wifi';
+import type { WifiState } from './wifi';
+import type { SourceFile } from '../model/types';
+import { initialFirmwareHttp, localHttpPath } from './httpTypes';
+import type { FirmwareHttp } from './httpTypes';
+import { gpioPins } from '../sim/gpio';
 import { constructI2cLcd, constructLcd, lcdMethod } from './lcdRuntime';
 import type { LcdObject } from './lcdRuntime';
 import type { BoardKind, GpioState } from '../model/types';
 import type { ValueType } from './ast';
 import type { UnoProgram } from './compiler';
-import { fail, MAX_ADVANCE_STEPS, MAX_AST_NODES } from './errors';
+import { fail, MAX_ADVANCE_STEPS, MAX_AST_NODES, MAX_NESTING, UnoExecutionError } from './errors';
 import type { SourceSpan } from './errors';
 import { builtinEffect } from './profile';
 import { binary, convert, unary } from './values';
@@ -19,6 +25,12 @@ import type { SerialState } from './serial';
 export const LOOP_QUANTUM_US = 1000;
 export interface Variable { type: ValueType; constant: boolean; value: Value | null }
 export interface UnoExecution {
+  resources: readonly SourceFile[];
+  wifi: WifiState;
+  texts: readonly ReadonlyMap<string, string>[];
+  textOperands: readonly string[];
+  http: FirmwareHttp;
+  frames: readonly { pc: number; scopeDepth: number; operandDepth: number; textDepth: number }[];
   program: UnoProgram;
   board: BoardKind;
   timeUs: number;
@@ -46,8 +58,8 @@ export interface UnoAdvanceResult {
   yielded: boolean;
   steps: number;
 }
-export function initialExecution(program: UnoProgram): UnoExecution {
-  return { program, board: program.board, timeUs: 0, timeMs: 0, phase: 'setup', pc: 0,
+export function initialExecution(program: UnoProgram, resources: readonly SourceFile[] = []): UnoExecution {
+  return { resources, wifi: initialWifi(), texts: [new Map()], textOperands: [], http: initialFirmwareHttp(), frames: [], program, board: program.board, timeUs: 0, timeMs: 0, phase: 'setup', pc: 0,
     wakeAtUs: null, wakeReason: null, wakeAt: null, pendingUntilUs: null, loopWaited: false,
     scopes: [new Map()], operands: [], objects: new Map(), hardware: new Map(), serial: initialSerial(), modes: {}, levels: {} };
 }
@@ -63,16 +75,21 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
   const operands = [...previous.operands], modes = { ...previous.modes }, levels = { ...previous.levels };
   const gpio: UnoGpioEvent[] = [];
   const objects = new Map(previous.objects), hardware = new Map(previous.hardware);
-  let serial = previous.serial;
-  let steps = 0, lcdTransfers = 0;
+  let serial = previous.serial, http = previous.http;
+  const frames = [...previous.frames];
+  const texts = previous.texts.map((scope) => new Map(scope));
+  const textOperands = [...previous.textOperands];
+  let wifi = previous.wifi;
+  let steps = 0, lcdTransfers = 0, digitalProbes = 0;
   const finish = (yielded: boolean): UnoAdvanceResult => ({
     execution: { ...previous, timeUs, timeMs: timeUs / 1000, phase, pc, wakeAtUs, wakeReason, wakeAt: wakeAtUs === null ? null : wakeAtUs / 1000,
-      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial },
+      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial, http, frames, texts, textOperands, wifi },
     gpio, yielded, steps,
   });
   const pop = (at: SourceSpan): Value => operands.pop() ?? fail('type-error', at);
   const locate = (name: string, at: SourceSpan): { scope: Map<string, Variable>; variable: Variable } => {
     for (let i = scopes.length - 1; i >= 0; i--) {
+      if (i !== 0 && frames.length && i < (frames.at(-1)?.scopeDepth ?? 0)) continue;
       const scope = scopes[i], variable = scope?.get(name);
       if (scope && variable) return { scope, variable };
     }
@@ -98,6 +115,7 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
       gpio.push({ atMs: timeUs / 1000, pinId, state: { mode: 'input', level: 'FLOATING' } });
     }
   };
+  try {
   for (;;) {
     if (wakeAtUs !== null) {
       if (wakeAtUs > target) { timeUs = target; return finish(false); }
@@ -105,16 +123,89 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
     }
     // LCD operations may invoke electrical probes. Bound peripheral work as
     // well as scalar instructions; long prints are compiled in 32-char chunks.
-    if (steps >= budget || lcdTransfers >= 8) return finish(true);
+    if (steps >= budget || lcdTransfers >= 8 || digitalProbes >= 8) return finish(true);
     const instruction = previous.program.code[pc++];
     if (!instruction) return fail('unsupported-syntax');
     const at = instruction.at;
     steps++;
     switch (instruction.op) {
+      case 'invoke': {
+        if (frames.length >= MAX_NESTING) return fail('nesting-limit', at);
+        frames.push({ pc, scopeDepth: scopes.length, operandDepth: operands.length, textDepth: textOperands.length });
+        pc = previous.program.functionPcs.get(instruction.name) ?? fail('name-error', at); break;
+      }
+      case 'function-return': {
+        const frame = frames.pop() ?? fail('type-error', at);
+        scopes.splice(frame.scopeDepth); texts.splice(frame.scopeDepth); textOperands.length = frame.textDepth; operands.length = frame.operandDepth; pc = frame.pc;
+        if (pc === -1) return finish(false);
+        break;
+      }
+      case 'text-push': textOperands.push(instruction.text); break;
+      case 'text-load': {
+        let text: string | undefined;
+        for (let i = texts.length - 1; i >= 0; i--) {
+          if (i !== 0 && frames.length && i < (frames.at(-1)?.scopeDepth ?? 0)) continue;
+          text = texts[i]?.get(instruction.name); if (text !== undefined) break;
+        }
+        textOperands.push(text ?? fail('name-error', at)); break;
+      }
+      case 'text-declare': {
+        const scope = texts.at(-1) ?? fail('type-error', at);
+        if (scope.has(instruction.name)) return fail('name-error', at);
+        scope.set(instruction.name, instruction.text); break;
+      }
+      case 'serial-value-text': serial = appendSerial(serial, textOperands.pop() ?? fail('type-error', at), instruction.newline); break;
+      case 'wifi-ip': textOperands.push(wifi.ip ?? fail('wifi-disconnected', at)); break;
+      case 'wifi':
+        if (instruction.name === 'status') operands.push({ type: 'int', value: wifi.status });
+        else if (instruction.name === 'disconnect') wifi = initialWifi();
+        else {
+          const password = textOperands.pop() ?? fail('type-error', at);
+          const ssid = textOperands.pop() ?? fail('type-error', at);
+          wifi = beginWifi(ssid, password);
+        }
+        break;
+      case 'digital-read': {
+        if (host?.readDigital) digitalProbes++;
+        const number = pop(at).value;
+        const pin = gpioPins(previous.board).find((item) => item.gpio === number);
+        if (!pin) return fail('invalid-value', at);
+        const level = host?.readDigital ? host.readDigital(pin.id, gpio) : modes[pin.id] === 'output' ? levels[pin.id] === 'HIGH' ? 1 : 0 : null;
+        if (level === null) return fail('indeterminate-read', at);
+        operands.push({ type: 'int', value: level }); break;
+      }
+      case 'fs-begin': http = { ...http, fs: true }; break;
+      case 'web-route': case 'web-static': case 'web-call': case 'web-send': case 'web-file': {
+        const server = Object.hasOwn(http.servers, instruction.receiver) ? http.servers[instruction.receiver] : undefined;
+        if (!server) return fail('name-error', at);
+        if (instruction.op === 'web-file') {
+          if (http.requestServer !== instruction.receiver || http.response !== null) return fail('invalid-value', at);
+          const file = http.fs ? previous.resources.find((item) => '/' + item.name === instruction.file) : undefined;
+          http = { ...http, response: file ? { status: 200, contentType: instruction.contentType, body: file.source }
+            : { status: 404, contentType: 'text/plain', body: '404' } };
+        } else if (instruction.op === 'web-send') {
+          const status = pop(at).value;
+          if (http.requestServer !== instruction.receiver || http.response !== null || !Number.isInteger(status) || status < 100 || status > 599) return fail('invalid-value', at);
+          http = { ...http, response: { status, contentType: instruction.contentType, body: textOperands.pop() ?? fail('type-error', at) } };
+        } else {
+          let next = server;
+          if (instruction.op === 'web-call') next = { ...server, ...(instruction.name === 'begin' ? { began: true } : { polling: true }) };
+          else {
+            if (!localHttpPath(instruction.path)) return fail('invalid-value', at);
+            if (!Object.hasOwn(server.routes, instruction.path) && Object.keys(server.routes).length >= 64) return fail('instruction-limit', at);
+            next = { ...server, routes: { ...server.routes, [instruction.path]: instruction.op === 'web-route' ? { handler: instruction.handler } : { file: instruction.file } } };
+          }
+          http = { ...http, servers: { ...http.servers, [instruction.receiver]: next } };
+        }
+        break;
+      }
       case 'wire-begin': beginWire(); break;
       case 'construct': {
         const args = operands.splice(operands.length - instruction.arity, instruction.arity).map((value) => value.value);
-        if (instruction.className === 'DHT' && instruction.arity === 2) {
+        if (instruction.className === 'ESP8266WebServer') {
+          if (previous.board !== 'esp8266' || args[0] !== 80 || Object.keys(http.servers).length) return fail('invalid-value', at);
+          http = { ...http, servers: { ...http.servers, [instruction.name]: { began: false, polling: false, routes: {} } } };
+        } else if (instruction.className === 'DHT' && instruction.arity === 2) {
           objects.set(instruction.name, { type: 'dht', value: constructDht(args[0] ?? NaN, args[1] ?? NaN, previous.board, at) });
         } else if (instruction.className === 'LiquidCrystal') objects.set(instruction.name, constructLcd(args, previous.board, at));
         else if (instruction.className === 'LiquidCrystal_I2C') objects.set(instruction.name, constructI2cLcd(args, previous.board, at));
@@ -203,11 +294,11 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
       }
       case 'jump': pc = instruction.target; break;
       case 'branch': if ((pop(at).value !== 0) === instruction.when) pc = instruction.target; break;
-      case 'enter': scopes.push(new Map()); break;
-      case 'leave': if (scopes.length < 2) return fail('type-error', at); scopes.pop(); break;
+      case 'enter': scopes.push(new Map()); texts.push(new Map()); break;
+      case 'leave': if (scopes.length < 2) return fail('type-error', at); scopes.pop(); texts.pop(); break;
       case 'start-loop': phase = 'loop'; loopWaited = false; break;
       case 'return':
-        scopes.splice(1); operands.length = 0;
+        scopes.splice(1); texts.splice(1); operands.length = 0; textOperands.length = 0;
         if (phase === 'setup') { phase = 'loop'; pc = previous.program.loopPc; loopWaited = false; }
         else repeatLoop(at);
         break;
@@ -235,7 +326,11 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
         break;
       }
     }
-    if (operands.length > MAX_AST_NODES) return fail('step-limit', at);
+    if (operands.length + textOperands.length > MAX_AST_NODES) return fail('step-limit', at);
+  }
+  } catch (error: unknown) {
+    if (error instanceof UnoExecutionError) error.serial = serial;
+    throw error;
   }
 }
 

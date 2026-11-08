@@ -5,15 +5,15 @@ import { toolLabels, toolTabs } from './types';
 import type { ToolTab } from './types';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
 
-export function ToolSidebar({ open, tab, onTab, onClose, onToggle, panels, width = 300, onWidth, canvasRef, canvasVersion, onDockChange }: {
+export function ToolSidebar({ open, tab, onTab, onClose, onToggle, panels, width = 300, onWidth, canvasRef, canvasVersion, onDockChange, expandSequence }: {
   open: boolean; tab: ToolTab; onTab: (tab: ToolTab) => void; onClose: () => void; onToggle: () => void;
   panels: Record<ToolTab, ReactNode>; width?: number; onWidth?: (width: number) => void;
   canvasRef?: RefObject<HTMLDivElement | null>; onDockChange?: (offset: number) => void;
-  canvasVersion?: string;
+  canvasVersion?: string; expandSequence?: number;
 }) {
   const { t } = useLocale();
   const tabs = useRef<Partial<Record<ToolTab, HTMLButtonElement>>>({});
-  return <WorkspaceSidebar open={open} onClose={onClose} onToggle={onToggle}
+  return <WorkspaceSidebar expandSequence={expandSequence} open={open} onClose={onClose} onToggle={onToggle}
     id="workspace-tools" label={t('workspaceTools')} testId="tool-sidebar"
     resizeLabel={t('resizeTools')} expandLabel={t('expandTools')} toggleLabel={t('toggleTools')}
     width={width} {...(onWidth ? { onWidth } : {})} {...(canvasRef ? { canvasRef } : {})}

@@ -15,7 +15,7 @@ import { Inspector } from './Inspector';
 const noop = () => undefined;
 const simulation: SimulationController = {
   ...initialSimulation(), start: noop, pause: noop, stop: noop, reset: noop,
-  runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setDht11: noop, setPotentiometer: noop,
+  requestFirmwareHttp: () => ({ status: 503, contentType: 'text/plain', body: '503' }), clearSerial: () => undefined, runFirmware: noop, stopFirmware: noop, connectDevice: noop, disconnectDevice: noop, requestHttp: noop, setGpio: noop, setButton: noop, setDht11: noop, setPotentiometer: noop,
 };
 afterEach(() => vi.unstubAllGlobals());
 const setLocale = (locale: string) => vi.stubGlobal('localStorage', { getItem: () => locale });
@@ -50,7 +50,7 @@ describe('contextual settings surfaces', () => {
         componentId: 'r', wireId: null, stageRef: { current: null }, onClose: noop, onSheetDockChange: noop,
         children: (headerActions, close) => createElement(Inspector, {
           component, kind: 'resistor', simulation, locked: false, selectedCount: 1,
-          headerActions, onClose: close, onRoadmap: noop, onUpdate: noop,
+          headerActions, onClose: close, onUpdate: noop,
           onRotate: noop, onDuplicate: noop, onRemove: noop, onStartConnection: noop,
         }),
       }),
