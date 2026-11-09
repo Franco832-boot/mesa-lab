@@ -416,7 +416,7 @@ export const en = {
   colorYellow: 'Yellow',
   resistance: 'Resistance (Ω)',
   ledColor: 'LED color',
-  ledPinInfo: 'A (+): anode. K (−): cathode. The longer leg is the anode.',
+  ledPinInfo: 'Anode (+): long lead. Cathode (−): short lead. On a conventional LED with untrimmed leads, lead length identifies its polarity.',
   potRatio: 'Position (0–1)',
   supplyVoltage: 'Configured voltage (V)',
   wireInspectorHint: 'Endpoints anchored to actual terminals',

@@ -415,7 +415,7 @@ export const es = {
   colorYellow: 'Amarillo',
   resistance: 'Resistencia (Ω)',
   ledColor: 'Color del LED',
-  ledPinInfo: 'A (+): ánodo. K (−): cátodo. La pata larga es el ánodo.',
+  ledPinInfo: 'Ánodo (+): pata larga. Cátodo (−): pata corta. En un LED convencional sin recortar, la longitud de las patas permite identificar su polaridad.',
   potRatio: 'Posición (0–1)',
   supplyVoltage: 'Tensión configurada (V)',
   wireInspectorHint: 'Extremos anclados a terminales reales',

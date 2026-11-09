@@ -13,6 +13,8 @@ interface ComponentArtworkProps {
   result?: ComponentResult;
   pressed?: boolean;
   wiperRatio?: number;
+  /** Presentation only; supplied by the workspace's reconciled breadboard placement. */
+  inserted?: boolean;
 }
 
 const numbers = (count: number) => Array.from({ length: count }, (_, i) => i);
@@ -532,6 +534,7 @@ function BasicArtwork({
   result,
   pressed,
   wiperRatio,
+  inserted = false,
 }: ComponentArtworkProps) {
   const color = properties && 'color' in properties ? ledColors[properties.color] : ledColors.red;
   const voltage = properties && 'voltage' in properties ? properties.voltage : 5;
@@ -539,9 +542,6 @@ function BasicArtwork({
   const bands = resistorBands(resistance);
   const ratio = wiperRatio ?? (properties && 'ratio' in properties ? properties.ratio : 0.5);
   const body = physicalSpecs[kind].sourceBody;
-  const ledAnode = componentDefinitions.led.sourcePins[0]?.position.x ?? 28;
-  const ledCathode = componentDefinitions.led.sourcePins[1]?.position.x ?? 49;
-  const ledLegs = componentDefinitions.led.sourcePins;
   const resistorLegs = componentDefinitions.resistor.sourcePins;
   const buttonLegs = componentDefinitions.pushbutton.sourcePins;
   const potLegs = componentDefinitions.potentiometer.sourcePins;
@@ -580,40 +580,70 @@ function BasicArtwork({
         <path d={`M${pin.position.x} 21V${pin.position.y}`} stroke="#c8c4ac" strokeWidth="0.65" />
       </g>)}
     </g>;
-    case 'led':
+    case 'led': {
+      const legs = componentDefinitions.led.sourcePins;
+      const anode = legs.find((pin) => pin.id === 'anode');
+      const cathode = legs.find((pin) => pin.id === 'cathode');
+      if (!anode || !cathode) return null;
+      // Move only the lens toward the registered contacts. Rotation and electrical
+      // pin positions remain in the workspace's unchanged component transform.
+      const bodyOffset = inserted
+        ? Math.min(anode.position.y, cathode.position.y) - (body.y + body.height) - 8
+        : 0;
       return (
-        <g>
-          <ellipse
-            className="led-glow"
-            data-testid="led-glow"
-            cx="38" cy="28" rx="30" ry="32"
-            fill={color}
-            opacity={result?.brightness ?? 0}
-            pointerEvents="none"
-          />
-          <path d={`M${ledAnode} 54V${ledLegs[0]?.position.y ?? 96}M${ledCathode} 54V${ledLegs[1]?.position.y ?? 96}`} stroke="#a9afab" strokeWidth="4" />
-          <path
-            d={`M15 49V${body.y + 23}a23 23 0 0 1 46 0V49Z`}
-            fill={color}
-            stroke={color}
-            strokeWidth="2"
-          />
-          <ellipse cx="38" cy="50" rx={body.width / 2} ry="8" fill={color} />
-          <path
-            d={`M24 31V${body.y + 18}c0-8 6-12 9-12`}
-            stroke="#ffffff"
-            opacity="0.55"
-            strokeWidth="5"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <path d="M28 42h8V30h13v12" fill="none" stroke="#a76053" strokeWidth="3" />
-          <ellipse
-            className="led-emission" cx="38" cy="28" rx="16" ry="20"
-            fill="#fff5c0" opacity={result?.brightness ?? 0} pointerEvents="none"
-          />
+        <g data-led-inserted={inserted}>
+          {inserted ? (
+            <g data-testid="led-inserted-leads" stroke="#a9afab" strokeWidth="4">
+              {legs.map((pin) => (
+                <path key={pin.id} d={`M${pin.position.x} ${pin.position.y - 12}V${pin.position.y - 3}`} />
+              ))}
+            </g>
+          ) : (
+            <g data-testid="led-free-leads">
+              <path d={`M${anode.position.x} 54V${anode.position.y}`} stroke="#a9afab" strokeWidth="4" />
+              <path d={`M${cathode.position.x} 54V${cathode.position.y - 16}`} stroke="#a9afab" strokeWidth="4" />
+              {/* A connection guide preserves the registered terminal without extending the metal lead. */}
+              <path
+                d={`M${cathode.position.x} ${cathode.position.y - 16}V${cathode.position.y}`}
+                stroke="#a9afab" strokeWidth="1.2" strokeDasharray="2 3" opacity="0.65"
+                pointerEvents="none"
+              />
+            </g>
+          )}
+          <g data-testid="led-lens" transform={`translate(0 ${bodyOffset})`}>
+            <ellipse
+              className="led-glow"
+              data-testid="led-glow"
+              cx="38" cy="28" rx="30" ry="32"
+              fill={color}
+              opacity={result?.brightness ?? 0}
+              pointerEvents="none"
+            />
+            <path
+              d={`M15 49V${body.y + 23}a23 23 0 0 1 46 0V49Z`}
+              fill={color}
+              stroke={color}
+              strokeWidth="2"
+            />
+            <path d={`M61 45.75A${body.width / 2} 8 0 1 0 61 54.25Z`} fill={color} />
+            <path d="M61 45.75V54.25" stroke="#a76053" strokeWidth="1" />
+            <path
+              d={`M24 31V${body.y + 18}c0-8 6-12 9-12`}
+              stroke="#ffffff"
+              opacity="0.55"
+              strokeWidth="5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <path d="M28 42h8V30h13v12" fill="none" stroke="#a76053" strokeWidth="3" />
+            <ellipse
+              className="led-emission" cx="38" cy="28" rx="16" ry="20"
+              fill="#fff5c0" opacity={result?.brightness ?? 0} pointerEvents="none"
+            />
+          </g>
         </g>
       );
+    }
     case 'resistor':
       return (
         <g>
@@ -690,6 +720,7 @@ function SourceArtwork({
   result,
   pressed,
   wiperRatio,
+  inserted = false,
 }: ComponentArtworkProps) {
   const prefix = useId().replaceAll(':', '');
   switch (kind) {
@@ -700,7 +731,7 @@ function SourceArtwork({
     case 'breadboard':
       return <Breadboard />;
     default:
-      return <BasicArtwork kind={kind} {...(properties ? { properties } : {})}
+      return <BasicArtwork kind={kind} inserted={inserted} {...(properties ? { properties } : {})}
         {...(result ? { result } : {})} {...(pressed !== undefined ? { pressed } : {})}
         {...(wiperRatio !== undefined ? { wiperRatio } : {})} />;
   }
@@ -712,10 +743,11 @@ export function ComponentArtwork({
   result,
   pressed,
   wiperRatio,
+  inserted = false,
 }: ComponentArtworkProps) {
   return (
     <g className="component-artwork" data-condition={result?.condition ?? 'normal'} transform={artworkTransform(kind)}>
-      <SourceArtwork kind={kind} {...(properties ? { properties } : {})}
+      <SourceArtwork kind={kind} inserted={inserted} {...(properties ? { properties } : {})}
         {...(result ? { result } : {})} {...(pressed !== undefined ? { pressed } : {})}
         {...(wiperRatio !== undefined ? { wiperRatio } : {})} />
     </g>

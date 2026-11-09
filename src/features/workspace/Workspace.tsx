@@ -150,6 +150,8 @@ export function Workspace(props: WorkspaceProps) {
           <Artwork
             kind={item.kind}
             properties={item.properties}
+            inserted={item.kind === 'led' && Boolean(item.attachments?.length) &&
+              !(interaction.insertionInvalid && interaction.insertingIds.includes(item.id))}
             {...(result ? { result } : {})}
             pressed={ownInput(props.simulation.inputs.buttons, item.id) ?? false}
             {...(wiperRatio !== undefined ? { wiperRatio } : {})}
