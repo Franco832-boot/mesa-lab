@@ -58,6 +58,11 @@ export function createProject(projectId?: string): CircuitProject {
   };
 }
 
+/** A blank independent document; reference-layout reset remains unchanged. */
+export function createEmptyProject(name: string, projectId?: string): CircuitProject {
+  return { ...createProject(projectId), name, components: [], wires: [], programs: [] };
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

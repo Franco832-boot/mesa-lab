@@ -5,13 +5,13 @@ import type { TranslationKey } from '../locales/es/messages';
 import { Icon } from '../shared/Icon';
 import { Dialog } from '../shared/Dialog';
 import { HelpDialog } from './HelpDialog';
-import type { ComponentKind, ElectronicComponent, PinReference, Point, Wire } from '../model/types';
+import type { CircuitProject, ComponentKind, ElectronicComponent, PinReference, Point, Wire } from '../model/types';
 import { componentDefinitions, createComponent } from '../model/components';
 import type { LedColor } from '../model/components';
 import { screenToWorld } from '../model/coordinates';
 import { useCircuitEditor } from '../features/project/useCircuitEditor';
 import { WireInspector } from '../features/components/WireInspector';
-import { MAX_PROJECT_BYTES, serializeProject } from '../model/project';
+import { createEmptyProject, MAX_PROJECT_BYTES, parseProject, serializeProject } from '../model/project';
 import { sourceFiles } from '../model/programFiles';
 import { useProject } from '../features/project/useProject';
 import { ComponentLibrary } from '../features/components/ComponentLibrary';
@@ -21,7 +21,8 @@ import { ToolSidebar } from '../features/tools/ToolSidebar';
 import { ProjectLibrary } from '../features/examples/ProjectLibrary';
 import { createExampleProject, projectExamples } from '../model/exampleProjects';
 import type { ExampleId } from '../model/exampleProjects';
-import { preserveBeforeExample } from '../features/examples/replacement';
+import { preserveBeforeExample, readProjectCopy } from '../features/examples/replacement';
+import { useProjectCopies } from '../features/examples/useProjectCopies';
 import { useWorkspaceTools } from '../features/tools/useWorkspaceTools';
 import { useBoardContext } from '../features/tools/useBoardContext';
 import { CodeWorkspace } from '../features/tools/CodeWorkspace';
@@ -32,6 +33,9 @@ import { statusMessages } from '../features/simulation/messages';
 
 import { SimulationConsole } from '../features/simulation/SimulationConsole';
 import { componentScreenBounds } from '../features/components/inspectorPlacement';
+import { CodeExportDialog } from '../features/codeExport/CodeExportDialog';
+
+type ProjectChoice = { kind: 'new' } | { kind: 'saved'; key: string };
 
 export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const { t, locale, setLocale } = useLocale();
@@ -55,6 +59,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const { projectsOpen, setProjectsOpen } = tools;
   const [webRevealSequence, setWebRevealSequence] = useState(0);
   const [pendingExample, setPendingExample] = useState<ExampleId | null>(null);
+  const [pendingProject, setPendingProject] = useState<ProjectChoice | null>(null);
+  const projectCopies = useProjectCopies(projectsOpen, revision);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const toolTab = tools.tab;
   const setToolTab = tools.setTab;
@@ -68,6 +74,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const [grid, setGrid] = useState(true);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [codeExport, setCodeExport] = useState<CircuitProject | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState<TranslationKey | null>(initialIssue);
@@ -278,31 +285,32 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       if (file.size > MAX_PROJECT_BYTES) throw new Error('project-too-large');
       const source = await file.text();
       if (lockedRef.current) return;
-      load(source);
-      setFitOnMount(false);
-      editor.clearSelection();
-      setConnectionRequest(null);
+      replaceWorkspace(source, { fit: false, serial: false });
       setNotice('importSuccess');
     } catch {
       setNotice('importError');
     }
   };
+  const replaceWorkspace = (source: string, { fit, serial }: { fit: boolean; serial: boolean }) => {
+    // Validate and preserve before touching selection, runtime or the document.
+    parseProject(source);
+    preserveBeforeExample(localStorage, project);
+    simulation.reset();
+    setFitOnMount(fit);
+    editor.clearSelection();
+    setInspectorOpen(false);
+    setConnectionRequest(null);
+    setWiperPreview(null);
+    setHighlightedIds([]);
+    setTool('select');
+    setConsoleOpen(serial);
+    load(source);
+  };
   const installExample = (id: ExampleId) => {
     try {
       const definition = projectExamples.find((example) => example.id === id);
       if (!definition) throw new Error('unknown-example');
-      const source = serializeProject(createExampleProject(id, t(definition.name)));
-      preserveBeforeExample(localStorage, project);
-      simulation.reset();
-      setFitOnMount(true);
-      editor.clearSelection();
-      setInspectorOpen(false);
-      setConnectionRequest(null);
-      setWiperPreview(null);
-      setHighlightedIds([]);
-      setTool('select');
-      setConsoleOpen(id === 'dht11');
-      load(source);
+      replaceWorkspace(serializeProject(createExampleProject(id, t(definition.name))), { fit: true, serial: id === 'dht11' });
       setPendingExample(null);
       setNotice('exampleLoaded');
     } catch {
@@ -312,6 +320,19 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const openExample = (id: ExampleId) => {
     if (!saved) setPendingExample(id);
     else installExample(id);
+  };
+  const installProject = (choice: ProjectChoice) => {
+    try {
+      const next = choice.kind === 'new' ? createEmptyProject(t('untitledProject')) : readProjectCopy(localStorage, choice.key);
+      replaceWorkspace(serializeProject(next), { fit: false, serial: false });
+      if (choice.kind === 'new') setToolTab('components');
+      setPendingProject(null);
+      setNotice(choice.kind === 'new' ? 'projectCreated' : 'savedProjectOpened');
+    } catch { setNotice('projectSwitchError'); }
+  };
+  const openProject = (choice: ProjectChoice) => {
+    if (!saved) setPendingProject(choice);
+    else installProject(choice);
   };
   const renderInspector = (components: ElectronicComponent[], wires: Wire[]) =>
     inspectorVisible ? (
@@ -370,28 +391,18 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         <a
           className="brand"
           href="#"
-          aria-label="Mesa Circuit Lab"
+          aria-label="LosProfesParaVos"
           onClick={(event) => {
             event.preventDefault();
             setHelpOpen(true);
           }}
         >
           <span className="brand-mark">
-            <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
-              <path
-                d="M5 21V8l9 6 9-6v13m-9-7v7"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="5" cy="6" r="1.5" fill="currentColor" />
-              <circle cx="23" cy="6" r="1.5" fill="currentColor" />
-            </svg>
+            <img src="/losprofesparavos-isotype.png" alt="" width={28} height={28} />
           </span>
           <span className="brand-name">
-            mesa<span className="brand-dot">.</span>
-            <small>CIRCUIT LAB</small>
+            LosProfesParaVos
+            <small>{t('brandSubtitle')}</small>
           </span>
         </a>
         <div className="header-divider" />
@@ -412,11 +423,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           </div>
         </div>
         <div className="header-actions">
-          <span className="phase-badge">
-            <span />
-            {t('phase')}
-            <span className="phase-description">{t('foundations')}</span>
-          </span>
           <button
             className="icon-button help-button"
             aria-label={t('help')}
@@ -451,6 +457,11 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 <button onClick={exportProject}>
                   <Icon name="download" size={16} />
                   {t('export')}
+                </button>
+                <button data-testid="export-code" disabled={boardContext.boards.length === 0}
+                  title={boardContext.boards.length === 0 ? t('codeExportNoBoard') : t('exportCode')}
+                  onClick={() => { setCodeExport(project); setMenuOpen(false); }}>
+                  <Icon name="download" size={16} />{t('exportCode')}
                 </button>
                 <button
                   disabled={locked}
@@ -664,7 +675,9 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             </div>
           </div>
           <div className="workspace-area">
-          <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={openExample} />
+          <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={openExample}
+            onCreate={() => openProject({ kind: 'new' })} onOpenCopy={(key) => openProject({ kind: 'saved', key })}
+            copies={projectCopies.copies} copiesError={projectCopies.error} activeName={project.name} />
           <Workspace
             key={`${project.id}-${revision}`}
             inspector={renderInspector}
@@ -820,11 +833,22 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         )}
       </div>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {codeExport && <CodeExportDialog project={codeExport} initialBoardId={boardContext.activeBoard?.id}
+        onClose={() => setCodeExport(null)} onDownloaded={() => { setCodeExport(null); setNotice('codeExportSuccess'); }} />}
       {pendingExample && <Dialog title={t('replaceExampleTitle')} onClose={() => setPendingExample(null)} className="reset-dialog">
         <p className="dialog-intro">{t('replaceExampleDetail')}</p>
         <div className="dialog-actions">
           <button className="secondary-button" onClick={() => setPendingExample(null)}>{t('cancel')}</button>
           <button className="primary-button" data-testid="confirm-example" onClick={() => installExample(pendingExample)}>{t('openExample')}</button>
+        </div>
+      </Dialog>}
+      {pendingProject && <Dialog title={t('replaceExampleTitle')} onClose={() => setPendingProject(null)} className="reset-dialog">
+        <p className="dialog-intro">{t('replaceProjectDetail')}</p>
+        <div className="dialog-actions">
+          <button className="secondary-button" onClick={() => setPendingProject(null)}>{t('cancel')}</button>
+          <button className="primary-button" data-testid="confirm-project" onClick={() => installProject(pendingProject)}>
+            {t(pendingProject.kind === 'new' ? 'createProject' : 'openSavedProject')}
+          </button>
         </div>
       </Dialog>}
       {resetOpen && (
@@ -843,11 +867,14 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
               disabled={locked}
               onClick={() => {
                 if (locked) return;
-                reset();
-                setFitOnMount(true);
-                editor.clearSelection();
-                setConnectionRequest(null);
-                setResetOpen(false);
+                try {
+                  preserveBeforeExample(localStorage, project);
+                  reset();
+                  setFitOnMount(true);
+                  editor.clearSelection();
+                  setConnectionRequest(null);
+                  setResetOpen(false);
+                } catch { setNotice('projectSwitchError'); }
               }}
             >
               {t('reset')}

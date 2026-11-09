@@ -9,6 +9,7 @@ import { statusMessages } from './messages';
 import { BoardRuntimeMonitor } from './BoardRuntimeMonitor';
 import type { FirmwareState } from './firmwareRuntime';
 import type { SimulationStatus } from './runtime';
+import { SimulationNotice } from './SimulationNotice';
 
 interface SimulationConsoleProps {
   open: boolean;
@@ -81,6 +82,7 @@ export function SimulationConsole({
           </div>
         </div>
       )}
+      <SimulationNotice />
     </div>
   );
 }

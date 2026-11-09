@@ -113,9 +113,9 @@ for (const locale of ['es','en']) for (const width of [1440,390]) {
     assert.equal(await page.getByTestId('project-library').isVisible(), true);
     await page.getByTestId('project-library').locator('.tool-sidebar-heading button').click();
     assert.equal(await page.getByTestId('project-library').isVisible(), false);
-    const help = width <= 760 ? page.getByRole('link', { name: 'Mesa Circuit Lab', exact: true }) : page.locator('.help-button');
+    const help = width <= 760 ? page.getByRole('link', { name: 'LosProfesParaVos', exact: true }) : page.locator('.help-button');
     await help.click();
-    const dialog = page.getByRole('dialog', { name: locale === 'es' ? 'Cómo usar Mesa Lab' : 'How to use Mesa Lab', exact: true });
+    const dialog = page.getByRole('dialog', { name: locale === 'es' ? 'Cómo usar LosProfesParaVos' : 'How to use LosProfesParaVos', exact: true });
     await dialog.waitFor();
     assert.equal(await dialog.locator('.help-sections section').count(), 10);
     assert.match(await dialog.textContent(), /DHT11/);
