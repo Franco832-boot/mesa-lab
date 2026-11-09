@@ -35,10 +35,15 @@ describe('preview capability boundary', () => {
 
 describe('bounded passive content', () => {
   it('removes CSS network syntax and untrusted at-rules while preserving static local styling', () => {
-    const page = preparePreview(() => response('<style>@import "https://x.invalid";@font-face{src:url(https://x.invalid/font)}body{background-image:u\\72l(https://x.invalid/img);color:red}@media(max-width:500px){button{padding:12px}}</style><p style="background:url(data:text/plain,x);color:blue">Safe</p>'));
+    const page = preparePreview(() => response('<style>@import "https://x.invalid";@font-face{src:url(https://x.invalid/font)}body{background-image:u\\72l(https://x.invalid/img);color:red}@media(max-width:500px){button{padding:12px;outline-offset:3px;transition-property:background-color, border-color;transition-duration:150ms;transition-timing-function:ease}}@media(prefers-reduced-motion:reduce){button{transition-duration:0s}}</style><p style="background:url(data:text/plain,x);color:blue">Safe</p>'));
     expect(page.html).not.toMatch(/@import|@font-face|url\(|https:/i);
     expect(page.html).toContain('color:red'); expect(page.html).toContain('color:blue');
     expect(page.html).toContain('@media');
+    expect(page.html).toContain('outline-offset:3px');
+    expect(page.html).toContain('transition-property:background-color, border-color');
+    expect(page.html).toContain('transition-duration:150ms');
+    expect(page.html).toContain('transition-timing-function:ease');
+    expect(page.html).toContain('transition-duration:0s');
   });
   it('enforces byte, node, script and cumulative style-rule limits before creating a frame', () => {
     for (const body of ['x'.repeat(96001), '<b></b>'.repeat(1001), '<script>0;</script>'.repeat(17), '<style>p{color:red}</style>'.repeat(257)])

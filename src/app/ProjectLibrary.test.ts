@@ -130,7 +130,7 @@ describe('independent project library and existing right tools', () => {
     localStorage.setItem('mesa.locale', locale); await mount();
     const contents = element('.project-library-content');
     expect(contents.firstElementChild?.getAttribute('data-testid')).toBe('create-project-card');
-    expect(contents.children[1]?.getAttribute('data-testid')).toBe('contact-project');
+    expect(contents.lastElementChild?.getAttribute('data-testid')).toBe('contact-project');
     expect(contents.querySelectorAll('[data-testid^="example-"]')).toHaveLength(projectExamples.length);
     const module = control('contact-module');
     expect(module.parentElement?.lastElementChild).toBe(module);

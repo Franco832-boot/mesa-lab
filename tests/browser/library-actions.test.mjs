@@ -30,6 +30,7 @@ for (const [locale, width] of [['es', 1440], ['en', 390]]) test(`project creatio
   const initial = await stored(page);
   const cards = await page.locator('.project-library-content > article').evaluateAll(nodes => nodes.map(node => node.dataset.testid));
   assert.deepEqual(cards, ['create-project-card', 'contact-project']);
+  assert.equal(await page.locator('.project-library-content').evaluate(node => node.lastElementChild.dataset.testid), 'contact-project');
   await mkdir('test-results/browser', { recursive: true });
   await page.getByTestId('contact-project').scrollIntoViewIfNeeded();
   await page.getByTestId('project-library').screenshot({ path: `test-results/browser/library-projects-${locale}-${width}.png`, animations: 'disabled' });

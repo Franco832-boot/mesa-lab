@@ -49,7 +49,6 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
         </details>
         {copiesError && <p role="alert">{t('projectCopiesError')}</p>}
       </article>
-      <ContactCard kind="project" />
       <p className="project-library-intro">{t('exampleProjectsIntro')}</p>
       {availableExampleCategories.map((category) => <section key={category} aria-labelledby={`examples-${category}`}>
         <h3 id={`examples-${category}`} className="project-category">{t(exampleCategoryLabels[category])}</h3>
@@ -67,6 +66,7 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
         </article>)}
       </section>)}
       <p className="project-library-intro">{t('exampleBackupNote')}</p>
+      <ContactCard kind="project" />
     </div>
   </WorkspaceSidebar>;
 }

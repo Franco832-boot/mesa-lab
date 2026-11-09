@@ -5,7 +5,7 @@ import type { TranslationKey } from '../locales/es/messages';
 import { Icon } from '../shared/Icon';
 import { Dialog } from '../shared/Dialog';
 import { HelpDialog } from './HelpDialog';
-import type { ComponentKind, ElectronicComponent, PinReference, Point, Wire } from '../model/types';
+import type { CircuitProject, ComponentKind, ElectronicComponent, PinReference, Point, Wire } from '../model/types';
 import { componentDefinitions, createComponent } from '../model/components';
 import type { LedColor } from '../model/components';
 import { screenToWorld } from '../model/coordinates';
@@ -33,6 +33,7 @@ import { statusMessages } from '../features/simulation/messages';
 
 import { SimulationConsole } from '../features/simulation/SimulationConsole';
 import { componentScreenBounds } from '../features/components/inspectorPlacement';
+import { CodeExportDialog } from '../features/codeExport/CodeExportDialog';
 
 type ProjectChoice = { kind: 'new' } | { kind: 'saved'; key: string };
 
@@ -73,6 +74,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const [grid, setGrid] = useState(true);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [codeExport, setCodeExport] = useState<CircuitProject | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState<TranslationKey | null>(initialIssue);
@@ -456,6 +458,11 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                   <Icon name="download" size={16} />
                   {t('export')}
                 </button>
+                <button data-testid="export-code" disabled={boardContext.boards.length === 0}
+                  title={boardContext.boards.length === 0 ? t('codeExportNoBoard') : t('exportCode')}
+                  onClick={() => { setCodeExport(project); setMenuOpen(false); }}>
+                  <Icon name="download" size={16} />{t('exportCode')}
+                </button>
                 <button
                   disabled={locked}
                   onClick={() => {
@@ -826,6 +833,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         )}
       </div>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {codeExport && <CodeExportDialog project={codeExport} initialBoardId={boardContext.activeBoard?.id}
+        onClose={() => setCodeExport(null)} onDownloaded={() => { setCodeExport(null); setNotice('codeExportSuccess'); }} />}
       {pendingExample && <Dialog title={t('replaceExampleTitle')} onClose={() => setPendingExample(null)} className="reset-dialog">
         <p className="dialog-intro">{t('replaceExampleDetail')}</p>
         <div className="dialog-actions">
