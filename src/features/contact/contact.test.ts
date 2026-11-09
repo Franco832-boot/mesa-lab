@@ -9,7 +9,7 @@ import { en } from '../../locales/en/messages';
 
 describe('owner-confirmed editable email drafts', () => {
   it('encodes editable fields without adding recipients or headers', () => {
-    expect(CONTACT_EMAIL).toBe('franco.bettiol@gmail.com');
+    expect(CONTACT_EMAIL).toBe('losprofesparavos073@gmail.com');
     const href = contactMailto('Consulta & módulo #1', 'Modelo: A&B\nUso: LED');
     const url = new URL(href);
     expect(url.protocol).toBe('mailto:'); expect(url.pathname).toBe(CONTACT_EMAIL);

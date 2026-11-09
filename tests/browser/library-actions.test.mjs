@@ -17,7 +17,7 @@ async function stored(page) {
 async function draft(page, kind) {
   const link = page.getByTestId(`contact-${kind}`).locator('a');
   const href = await link.getAttribute('href'), url = new URL(href);
-  assert.equal(url.protocol, 'mailto:'); assert.equal(url.pathname, 'franco.bettiol@gmail.com');
+  assert.equal(url.protocol, 'mailto:'); assert.equal(url.pathname, 'losprofesparavos073@gmail.com');
   assert.ok(url.searchParams.get('body').includes('\r\n'));
   // Observe a real link click without launching an OS email client or sending mail.
   await link.evaluate(anchor => anchor.addEventListener('click', event => { event.preventDefault(); window.testDraft = anchor.href; }, { once: true }));

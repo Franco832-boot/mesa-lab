@@ -146,7 +146,7 @@ describe('independent project library and existing right tools', () => {
       const href = link.getAttribute('href');
       if (!href) throw new Error('Missing mailto');
       const url = new URL(href);
-      expect(url.protocol).toBe('mailto:'); expect(url.pathname).toBe('franco.bettiol@gmail.com');
+      expect(url.protocol).toBe('mailto:'); expect(url.pathname).toBe('losprofesparavos073@gmail.com');
       expect(url.searchParams.get('subject')).toContain('LosProfesParaVos');
       expect(url.searchParams.get('body')).toContain('\r\n');
     }
