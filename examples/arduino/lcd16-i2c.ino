@@ -9,7 +9,7 @@ void setup() {
   Wire.begin();
   lcd.init();
   lcd.backlight();
-  lcd.print("Mesa Lab");
+  lcd.print("LosProfesParaVos");
   lcd.setCursor(0, 1);
   lcd.print("LCD 16x2 I2C");
 }
