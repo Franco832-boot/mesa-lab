@@ -9,7 +9,7 @@ import type { LcdObject } from './lcdRuntime';
 import type { BoardKind, GpioState } from '../model/types';
 import type { ValueType } from './ast';
 import type { UnoProgram } from './compiler';
-import { fail, MAX_ADVANCE_STEPS, MAX_AST_NODES, MAX_NESTING, UnoExecutionError } from './errors';
+import { fail, MAX_ADVANCE_STEPS, MAX_AST_NODES, MAX_NESTING, MAX_SOURCE_LENGTH, UnoExecutionError } from './errors';
 import type { SourceSpan } from './errors';
 import { builtinEffect } from './profile';
 import { binary, convert, unary } from './values';
@@ -20,6 +20,9 @@ import { constructDht, readDht } from './dhtRuntime';
 import type { DhtObject, HardwareSample } from './dhtRuntime';
 import { appendSerial, initialSerial, serialNumber } from './serial';
 import type { SerialState } from './serial';
+import { initialTelegram, pollTelegram, replyTelegram } from './telegram';
+import type { TelegramState } from './telegram';
+import { TELEGRAM_WIFI_NETWORK, WL_CONNECTED } from './wifi';
 
 /** A polling loop runs once per virtual millisecond. This is not CPU cycle timing. */
 export const LOOP_QUANTUM_US = 1000;
@@ -27,6 +30,7 @@ export interface Variable { type: ValueType; constant: boolean; value: Value | n
 export interface UnoExecution {
   resources: readonly SourceFile[];
   wifi: WifiState;
+  telegram: TelegramState | null;
   texts: readonly ReadonlyMap<string, string>[];
   textOperands: readonly string[];
   http: FirmwareHttp;
@@ -59,7 +63,7 @@ export interface UnoAdvanceResult {
   steps: number;
 }
 export function initialExecution(program: UnoProgram, resources: readonly SourceFile[] = []): UnoExecution {
-  return { resources, wifi: initialWifi(), texts: [new Map()], textOperands: [], http: initialFirmwareHttp(), frames: [], program, board: program.board, timeUs: 0, timeMs: 0, phase: 'setup', pc: 0,
+  return { resources, telegram: null, wifi: initialWifi(), texts: [new Map()], textOperands: [], http: initialFirmwareHttp(), frames: [], program, board: program.board, timeUs: 0, timeMs: 0, phase: 'setup', pc: 0,
     wakeAtUs: null, wakeReason: null, wakeAt: null, pendingUntilUs: null, loopWaited: false,
     scopes: [new Map()], operands: [], objects: new Map(), hardware: new Map(), serial: initialSerial(), modes: {}, levels: {} };
 }
@@ -79,13 +83,22 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
   const frames = [...previous.frames];
   const texts = previous.texts.map((scope) => new Map(scope));
   const textOperands = [...previous.textOperands];
-  let wifi = previous.wifi;
+  let wifi = previous.wifi, telegram = previous.telegram;
   let steps = 0, lcdTransfers = 0, digitalProbes = 0;
   const finish = (yielded: boolean): UnoAdvanceResult => ({
     execution: { ...previous, timeUs, timeMs: timeUs / 1000, phase, pc, wakeAtUs, wakeReason, wakeAt: wakeAtUs === null ? null : wakeAtUs / 1000,
-      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial, http, frames, texts, textOperands, wifi: advanceWifi(wifi, timeUs) },
+      pendingUntilUs: yielded ? target : null, loopWaited, scopes, operands, modes, levels, objects, hardware, serial, http, frames, texts, textOperands, telegram, wifi: advanceWifi(wifi, timeUs) },
     gpio, yielded, steps,
   });
+  const popText = (at: SourceSpan): string => textOperands.pop() ?? fail('type-error', at);
+  const textScope = (name: string, at: SourceSpan): Map<string, string> => {
+    for (let i = texts.length - 1; i >= 0; i--) {
+      if (i !== 0 && frames.length && i < (frames.at(-1)?.scopeDepth ?? 0)) continue;
+      const scope = texts[i];
+      if (scope?.has(name)) return scope;
+    }
+    return fail('name-error', at);
+  };
   const pop = (at: SourceSpan): Value => operands.pop() ?? fail('type-error', at);
   const locate = (name: string, at: SourceSpan): { scope: Map<string, Variable>; variable: Variable } => {
     for (let i = scopes.length - 1; i >= 0; i--) {
@@ -131,7 +144,7 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
     switch (instruction.op) {
       case 'invoke': {
         if (frames.length >= MAX_NESTING) return fail('nesting-limit', at);
-        frames.push({ pc, scopeDepth: scopes.length, operandDepth: operands.length, textDepth: textOperands.length });
+        frames.push({ pc, scopeDepth: scopes.length, operandDepth: operands.length - instruction.arity, textDepth: textOperands.length });
         pc = previous.program.functionPcs.get(instruction.name) ?? fail('name-error', at); break;
       }
       case 'missing-return': return fail('type-error', at);
@@ -145,18 +158,55 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
         break;
       }
       case 'text-push': textOperands.push(instruction.text); break;
-      case 'text-load': {
-        let text: string | undefined;
-        for (let i = texts.length - 1; i >= 0; i--) {
-          if (i !== 0 && frames.length && i < (frames.at(-1)?.scopeDepth ?? 0)) continue;
-          text = texts[i]?.get(instruction.name); if (text !== undefined) break;
-        }
-        textOperands.push(text ?? fail('name-error', at)); break;
-      }
+      case 'text-load': textOperands.push(textScope(instruction.name, at).get(instruction.name) ?? fail('name-error', at)); break;
       case 'text-declare': {
         const scope = texts.at(-1) ?? fail('type-error', at);
         if (scope.has(instruction.name)) return fail('name-error', at);
-        scope.set(instruction.name, instruction.text); break;
+        scope.set(instruction.name, popText(at)); break;
+      }
+      case 'text-store': {
+        const value = textOperands.at(-1) ?? fail('type-error', at);
+        textScope(instruction.name, at).set(instruction.name, value); break;
+      }
+      case 'text-drop': popText(at); break;
+      case 'text-concat': {
+        const right = popText(at), left = popText(at);
+        if (left.length + right.length > MAX_SOURCE_LENGTH) return fail('invalid-value', at);
+        textOperands.push(left + right); break;
+      }
+      case 'text-compare': {
+        const right = popText(at), left = popText(at);
+        operands.push({ type: 'bool', value: Number((left === right) !== instruction.unequal) }); break;
+      }
+      case 'stringify': textOperands.push(String(pop(at).value)); break;
+      case 'bot-init':
+        popText(at);
+        telegram = initialTelegram();
+        break;
+      case 'bot-last-message':
+        operands.push({ type: 'long', value: telegram?.lastMessageReceived ?? fail('name-error', at) }); break;
+      case 'bot-field': {
+        const index = pop(at).value;
+        if (index !== 0 || !telegram?.message) return fail('invalid-value', at);
+        textOperands.push(telegram.message[instruction.field === 'chat_id' ? 'chatId' : 'text']); break;
+      }
+      case 'bot-updates': {
+        const offset = convert(pop(at).value, 'long', previous.board, at).value;
+        if (offset < 0 || !telegram) return fail('invalid-value', at);
+        wifi = advanceWifi(wifi, timeUs);
+        const result = wifi.status === WL_CONNECTED ? pollTelegram(telegram, offset) : { state: telegram, count: 0 };
+        telegram = result.state;
+        operands.push({ type: 'int', value: result.count }); break;
+      }
+      case 'bot-send': {
+        if (instruction.hasParseMode) popText(at);
+        const text = popText(at), chatId = popText(at);
+        if (!telegram) return fail('name-error', at);
+        wifi = advanceWifi(wifi, timeUs);
+        const next = wifi.status === WL_CONNECTED ? replyTelegram(telegram, chatId, text) : telegram;
+        operands.push({ type: 'bool', value: Number(next !== telegram) });
+        telegram = next;
+        break;
       }
       case 'serial-value-text': serial = appendSerial(serial, textOperands.pop() ?? fail('type-error', at), instruction.newline); break;
       case 'wifi-ip': wifi = advanceWifi(wifi, timeUs); textOperands.push(wifi.ip ?? fail('wifi-disconnected', at)); break;
@@ -170,7 +220,8 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
         else {
           const password = textOperands.pop() ?? fail('type-error', at);
           const ssid = textOperands.pop() ?? fail('type-error', at);
-          wifi = beginWifi(ssid, password, timeUs, host?.wifiNetwork);
+          wifi = beginWifi(ssid, password, timeUs, host?.wifiNetwork ??
+            (telegram && ssid === TELEGRAM_WIFI_NETWORK.ssid ? TELEGRAM_WIFI_NETWORK : undefined));
         }
         break;
       case 'digital-read': {

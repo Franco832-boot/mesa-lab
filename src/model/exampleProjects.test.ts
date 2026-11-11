@@ -34,7 +34,7 @@ describe('ordinary v1 educational project templates', () => {
     expect(project.components.find((part) => part.kind === 'breadboard')).toBeDefined();
     for (const part of project.components.filter((part) => canInsert(part.kind))) expect(part.attachments).toHaveLength(componentDefinitions[part.kind].pins.length);
     expect(parseProject(serializeProject(project))).toEqual(project);
-    if (example.id === 'esp-web-led') expect(() => compileProjectFiles(sourceFiles(project.programs[0]), 'esp8266')).not.toThrow();
+    if (example.components.some((kind) => kind === 'esp8266')) expect(() => compileProjectFiles(sourceFiles(project.programs[0]), 'esp8266')).not.toThrow();
     else expect(() => compileArduinoSubset(project.programs[0]?.source ?? '')).not.toThrow();
     expect(start(project).firmware[project.programs[0]?.componentId ?? 'uno']?.error).toBeNull();
   });

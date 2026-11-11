@@ -15,6 +15,9 @@ export interface VirtualWifiNetwork {
 export const DEFAULT_WIFI_NETWORK: VirtualWifiNetwork = Object.freeze({
   ssid: 'MiCasa', password: 'carlos', connectDelayMs: 300, ip: EMULATED_IP, available: true,
 });
+export const TELEGRAM_WIFI_NETWORK: VirtualWifiNetwork = Object.freeze({
+  ...DEFAULT_WIFI_NETWORK, ssid: 'SIMULATED_WIFI', password: 'SIMULATED_PASSWORD',
+});
 export function validWifiNetwork(network: VirtualWifiNetwork): boolean {
   const host = Number(network.ip.split('.').at(-1));
   return network.ssid.trim().length > 0 && network.ssid.length <= 80 && network.password.trim().length > 0 && network.password.length <= 128

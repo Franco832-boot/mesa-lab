@@ -34,7 +34,7 @@ export function transitionSimulation(
   project: CircuitProject,
 ): SimulationState {
   if (event.type === 'stop' || event.type === 'reset') return initialSimulation();
-  if (event.type === 'firmware-clear-serial' || event.type === 'firmware-http' || event.type === 'firmware-run' || event.type === 'firmware-stop' || event.type === 'firmware-advance')
+  if (event.type === 'firmware-chat' || event.type === 'firmware-clear-serial' || event.type === 'firmware-http' || event.type === 'firmware-run' || event.type === 'firmware-stop' || event.type === 'firmware-advance')
     return transitionFirmware(previous, event, project);
   if (event.type === 'connect' || event.type === 'disconnect') {
     return { ...previous, virtualNetwork: event.type === 'connect'

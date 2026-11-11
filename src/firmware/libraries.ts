@@ -1,6 +1,6 @@
 /** Explicit API contracts; these adapters do not load or execute native C++ libraries. */
-export interface MethodSignature { minArgs: number; maxArgs: number; result: 'float' | 'void' | 'text' }
-export const libraryNames = ['DHT', 'Serial', 'LiquidCrystal', 'LiquidCrystal_I2C', 'Wire', 'ESP8266WebServer', 'LittleFS', 'WiFi'] as const;
+export interface MethodSignature { minArgs: number; maxArgs: number; result: 'float' | 'int' | 'bool' | 'void' | 'text' }
+export const libraryNames = ['DHT', 'Serial', 'LiquidCrystal', 'LiquidCrystal_I2C', 'Wire', 'ESP8266WebServer', 'LittleFS', 'WiFi', 'WiFiClientSecure', 'UniversalTelegramBot'] as const;
 export type LibraryClass = typeof libraryNames[number];
 const lcdMethods: Readonly<Record<string, MethodSignature>> = {
     begin: { minArgs: 2, maxArgs: 2, result: 'void' }, clear: { minArgs: 0, maxArgs: 0, result: 'void' },
@@ -11,6 +11,13 @@ const lcdMethods: Readonly<Record<string, MethodSignature>> = {
     display: { minArgs: 0, maxArgs: 0, result: 'void' }, noDisplay: { minArgs: 0, maxArgs: 0, result: 'void' },
   };
 export const LIBRARIES: Record<LibraryClass, { header: string | null; constructorArity: number | null; methods: Readonly<Record<string, MethodSignature>> }> = {
+  WiFiClientSecure: { header: 'WiFiClientSecure.h', constructorArity: 0, methods: {
+    setInsecure: { minArgs: 0, maxArgs: 0, result: 'void' },
+  } },
+  UniversalTelegramBot: { header: 'UniversalTelegramBot.h', constructorArity: 2, methods: {
+    getUpdates: { minArgs: 1, maxArgs: 1, result: 'int' },
+    sendMessage: { minArgs: 2, maxArgs: 3, result: 'bool' },
+  } },
   WiFi: { header: 'ESP8266WiFi.h', constructorArity: null, methods: {
     mode: { minArgs: 1, maxArgs: 1, result: 'float' },
     begin: { minArgs: 2, maxArgs: 2, result: 'void' }, status: { minArgs: 0, maxArgs: 0, result: 'float' },

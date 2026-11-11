@@ -14,6 +14,7 @@ import type { SimulationEvent, SimulationState } from './runtime';
 
 export interface SimulationController extends SimulationState {
   requestFirmwareHttp(componentId: string, path: string, session?: FirmwareSession): HttpResponse;
+  sendFirmwareChat(componentId: string, chatId: string, text: string): boolean;
   runFirmware(componentId: string, source: string): void;
   clearSerial(componentId: string): void;
   stopFirmware(componentId: string): void;
@@ -51,10 +52,11 @@ export function useSimulation(
     latest.current = next;
     if (next !== previous) setState(next);
     if (
-      event.type !== 'firmware-advance' &&
+      event.type !== 'firmware-advance' && event.type !== 'firmware-chat' &&
       (next.status !== previous.status || next.firmware !== previous.firmware)
     )
       arm.current();
+    return next !== previous;
   }, []);
   useEffect(() => {
     // The pump reads current transient state, rather than waiting for a React effect
@@ -100,6 +102,7 @@ export function useSimulation(
       send({ ...(session ? { session } : {}), type: 'firmware-http', componentId, path });
       return latest.current.firmware[componentId]?.httpResponse ?? { status: 503, contentType: 'text/plain', body: '503' };
     },
+    sendFirmwareChat: (componentId, chatId, text) => send({ type: 'firmware-chat', componentId, chatId, text }),
     runFirmware: (componentId, source) => send({ type: 'firmware-run', componentId, source }),
     clearSerial: (componentId) => send({ type: 'firmware-clear-serial', componentId }),
     stopFirmware: (componentId) => send({ type: 'firmware-stop', componentId }),

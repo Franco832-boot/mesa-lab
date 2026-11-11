@@ -6,6 +6,8 @@ import type {
   GpioCall,
   SketchAst,
   Statement,
+  TextDeclaration,
+  SketchFunction,
   ValueType,
 } from './ast';
 import { fail, MAX_AST_NODES } from './errors';
@@ -22,12 +24,18 @@ import type { ObjectDeclaration } from './ast';
 type Operation =
   | { op: 'text-push'; text: string }
   | { op: 'text-load'; name: string }
-  | { op: 'text-declare'; name: string; text: string }
+  | { op: 'text-declare' | 'text-store'; name: string }
+  | { op: 'text-concat' | 'text-drop' | 'stringify' }
+  | { op: 'text-compare'; unequal: boolean }
+  | { op: 'bot-init' }
+  | { op: 'bot-updates' | 'bot-last-message' }
+  | { op: 'bot-field'; field: 'chat_id' | 'text' }
+  | { op: 'bot-send'; hasParseMode: boolean }
   | { op: 'wifi'; name: 'begin' | 'status' | 'disconnect' | 'mode' }
   | { op: 'wifi-ip' }
   | { op: 'serial-value-text'; newline: boolean }
   | { op: 'web-file'; receiver: string; file: string; contentType: string }
-  | { op: 'invoke'; name: string }
+  | { op: 'invoke'; name: string; arity: number }
   | { op: 'function-return'; value: boolean }
   | { op: 'missing-return' | 'while-yield' }
   | { op: 'digital-read' }
@@ -96,6 +104,8 @@ const reserved = new Set([
   'float',
   'isnan',
   'digitalRead',
+  'yield',
+  'String',
   ...Object.keys(LIBRARIES),
   ...Object.keys(GPIO_BUILTINS),
   ...Object.keys(CLOCK_BUILTINS),
@@ -111,6 +121,12 @@ function references(value: Expression, name: string): boolean {
       return references(value.value, name);
     case 'method':
       return value.receiver === name || value.args.some((arg) => references(arg, name));
+    case 'member':
+      return value.receiver === name;
+    case 'message-field':
+      return value.receiver === name || references(value.index, name);
+    case 'conditional':
+      return [value.condition, value.yes, value.no].some((branch) => references(branch, name));
     case 'atom':
       return value.token === name;
     case 'clock':
@@ -135,7 +151,8 @@ class Compiler {
     ['LittleFS', 'LittleFS'],
     ['WiFi', 'WiFi'],
   ]);
-  private functions = new Map<string, 'void' | 'bool'>();
+  private functions = new Map<string, SketchFunction>();
+  private loops: { scopeDepth: number; continues: number[] }[] = [];
   private functionResult: 'void' | 'bool' = 'void';
   private inFunction = false;
   private headers: readonly string[] = [];
@@ -182,32 +199,63 @@ class Compiler {
     }
   }
   private isText(value: Expression): boolean {
-    return (
-      value.kind === 'string' ||
-      (value.kind === 'atom' &&
-        [...this.scopes]
-          .reverse()
-          .find((scope) => scope.has(value.token))
-          ?.get(value.token)?.type === 'text') ||
-      (value.kind === 'method' && value.receiver === 'WiFi' && value.name === 'localIP')
-    );
+    switch (value.kind) {
+      case 'string': case 'message-field': return true;
+      case 'invoke': return value.name === 'String';
+      case 'method': return value.receiver === 'WiFi' && value.name === 'localIP';
+      case 'atom': case 'assign': {
+        const name = value.kind === 'atom' ? value.token : value.name;
+        return [...this.scopes].reverse().find((scope) => scope.has(name))?.get(name)?.type === 'text';
+      }
+      case 'conditional': return this.isText(value.yes) || this.isText(value.no);
+      case 'binary': return value.operator === '+' && (this.isText(value.left) || this.isText(value.right));
+      default: return false;
+    }
+  }
+  private requireBot(receiver: string, at: SourceSpan): void {
+    if (this.objects.get(receiver) !== 'UniversalTelegramBot') fail('type-error', at);
+  }
+  private conditional(value: Extract<Expression, { kind: 'conditional' }>, compile: (branch: Expression) => void): void {
+    this.expression(value.condition);
+    const alternate = this.emit({ op: 'branch', when: false, target: 0 }, value.at);
+    compile(value.yes);
+    const end = this.emit({ op: 'jump', target: 0 }, value.at);
+    this.patch(alternate, this.code.length);
+    compile(value.no);
+    this.patch(end, this.code.length);
   }
   private textExpression(value: Expression): void {
-    if (value.kind === 'string') this.emit({ op: 'text-push', text: value.value }, value.at);
-    else if (value.kind === 'atom' && this.binding(value.token, value.at).type === 'text')
-      this.emit({ op: 'text-load', name: value.token }, value.at);
-    else if (
-      value.kind === 'method' &&
-      value.receiver === 'WiFi' &&
-      value.name === 'localIP' &&
-      value.args.length === 0 &&
-      this.board === 'esp8266' &&
-      this.headers.includes('ESP8266WiFi.h')
-    )
-      this.emit({ op: 'wifi-ip' }, value.at);
-    else fail('type-error', value.at);
+    const at = value.at;
+    if (value.kind === 'string') this.emit({ op: 'text-push', text: value.value }, at);
+    else if (value.kind === 'atom' && this.binding(value.token, at).type === 'text')
+      this.emit({ op: 'text-load', name: value.token }, at);
+    else if (value.kind === 'method' && this.isText(value) && value.args.length === 0 &&
+      this.board === 'esp8266' && this.headers.includes('ESP8266WiFi.h'))
+      this.emit({ op: 'wifi-ip' }, at);
+    else if (value.kind === 'message-field') {
+      this.requireBot(value.receiver, at);
+      this.expression(value.index);
+      this.emit({ op: 'bot-field', field: value.field }, at);
+    } else if (value.kind === 'conditional') this.conditional(value, (branch) => this.textExpression(branch));
+    else if (value.kind === 'invoke' && value.name === 'String' && value.args.length === 1) {
+      const arg = value.args[0] ?? fail('type-error', at);
+      if (this.isText(arg)) this.textExpression(arg);
+      else { this.expression(arg); this.emit({ op: 'stringify' }, at); }
+    } else if (value.kind === 'binary' && value.operator === '+') {
+      for (const arg of [value.left, value.right]) {
+        if (this.isText(arg)) this.textExpression(arg);
+        else { this.expression(arg); this.emit({ op: 'stringify' }, at); }
+      }
+      this.emit({ op: 'text-concat' }, at);
+    } else if (value.kind === 'assign' && this.binding(value.name, at, true).type === 'text') {
+      if (value.operator !== '=' && value.operator !== '+=') return fail('type-error', at);
+      if (value.operator === '+=') this.emit({ op: 'text-load', name: value.name }, at);
+      this.textExpression(value.value);
+      if (value.operator === '+=') this.emit({ op: 'text-concat' }, at);
+      this.emit({ op: 'text-store', name: value.name }, at);
+    } else fail('type-error', at);
   }
-  private textDeclaration(value: { name: string; value: string; at: SourceSpan }): void {
+  private textDeclaration(value: TextDeclaration): void {
     const scope = this.scopes.at(-1) ?? fail('name-error', value.at);
     if (
       scope.has(value.name) ||
@@ -216,8 +264,10 @@ class Compiler {
       constantValue(value.name, this.board, value.at)
     )
       fail('name-error', value.at);
-    this.emit({ op: 'text-declare', name: value.name, text: value.value }, value.at);
-    scope.set(value.name, { type: 'text', constant: true });
+    if (value.initializer) this.textExpression(value.initializer);
+    else this.emit({ op: 'text-push', text: '' }, value.at);
+    this.emit({ op: 'text-declare', name: value.name }, value.at);
+    scope.set(value.name, { type: 'text', constant: value.constant });
   }
   private expression(value: Expression, allowVoid = false): void {
     const at = value.at;
@@ -229,16 +279,30 @@ class Compiler {
           this.emit({ op: 'digital-read' }, at);
           return;
         }
-        if (value.args.length !== 0 || (!allowVoid && this.functions.get(value.name) === 'void'))
-          return fail('unsupported-syntax', at);
-        if (!this.functions.has(value.name)) return fail('name-error', at);
-        this.emit({ op: 'invoke', name: value.name }, at);
-        if (this.functions.get(value.name) === 'void')
+        if (value.name === 'yield' && this.board === 'esp8266' && allowVoid && value.args.length === 0) {
+          this.emit({ op: 'while-yield' }, at);
           this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+          return;
+        }
+        const fn = this.functions.get(value.name);
+        if (!fn) return fail('name-error', at);
+        if (value.args.length !== fn.parameters.length || (!allowVoid && fn.result === 'void'))
+          return fail('unsupported-syntax', at);
+        for (const arg of value.args) this.expression(arg);
+        this.emit({ op: 'invoke', name: value.name, arity: value.args.length }, at);
+        if (fn.result === 'void') this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
         return;
       }
-      case 'string':
+      case 'string': case 'message-field':
         return fail('type-error', at);
+      case 'member':
+        this.requireBot(value.receiver, at);
+        if (value.name !== 'last_message_received') return fail('unsupported-syntax', at);
+        this.emit({ op: 'bot-last-message' }, at);
+        return;
+      case 'conditional':
+        this.conditional(value, (branch) => this.expression(branch));
+        return;
       case 'isnan':
         this.expression(value.value);
         this.emit({ op: 'isnan' }, at);
@@ -273,6 +337,16 @@ class Compiler {
           this.emit({ op: 'wifi', name: value.name }, at);
           if (value.name !== 'status' && value.name !== 'mode')
             this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else if (type === 'WiFiClientSecure') {
+          this.emit({ op: 'push', value: { type: 'int', value: 0 } }, at);
+        } else if (type === 'UniversalTelegramBot') {
+          if (value.name === 'getUpdates') {
+            this.expression(value.args[0] ?? fail('type-error', at));
+            this.emit({ op: 'bot-updates' }, at);
+          } else {
+            for (const arg of value.args) this.textExpression(arg);
+            this.emit({ op: 'bot-send', hasParseMode: value.args.length === 3 }, at);
+          }
         } else if (type === 'ESP8266WebServer' || type === 'LittleFS') {
           if (
             this.board !== 'esp8266' ||
@@ -287,10 +361,11 @@ class Compiler {
           else if (value.name === 'on') {
             const method = value.args.length === 3 ? value.args[1] : null,
               handler = value.args[value.args.length - 1];
+            const callback = handler?.kind === 'atom' ? this.functions.get(handler.token) : undefined;
             if (
               (method && (method.kind !== 'atom' || method.token !== 'HTTP_GET')) ||
               handler?.kind !== 'atom' ||
-              this.functions.get(handler.token) !== 'void'
+              callback?.result !== 'void' || callback.parameters.length !== 0
             )
               return fail('unsupported-syntax', at);
             this.emit(
@@ -424,7 +499,7 @@ class Compiler {
         this.emit({ op: 'unary', operator: value.operator }, at);
         return;
       case 'update': {
-        if (this.binding(value.name, at, true).type === 'bool') fail('type-error', at);
+        if (['bool', 'text'].includes(this.binding(value.name, at, true).type)) fail('type-error', at);
         this.emit(
           {
             op: 'update',
@@ -437,7 +512,7 @@ class Compiler {
         return;
       }
       case 'assign': {
-        this.binding(value.name, at, true);
+        if (this.binding(value.name, at, true).type === 'text') return fail('type-error', at);
         this.expression(value.value);
         let compound: BinaryOperator | null = null;
         switch (value.operator) {
@@ -461,6 +536,13 @@ class Compiler {
         return;
       }
       case 'binary': {
+        if (this.isText(value.left) || this.isText(value.right)) {
+          if (value.operator !== '==' && value.operator !== '!=') return fail('type-error', at);
+          this.textExpression(value.left);
+          this.textExpression(value.right);
+          this.emit({ op: 'text-compare', unequal: value.operator === '!=' }, at);
+          return;
+        }
         this.expression(value.left);
         if (value.operator === '&&' || value.operator === '||') {
           const when = value.operator === '||';
@@ -511,13 +593,20 @@ class Compiler {
     this.emit({ op: 'leave' }, at);
     this.scopes.pop();
   }
+  private loopBody(body: Statement): void {
+    const loop = { scopeDepth: this.scopes.length, continues: new Array<number>() };
+    this.loops.push(loop);
+    this.scoped([body], body.at);
+    this.loops.pop();
+    for (const index of loop.continues) this.patch(index, this.code.length);
+  }
   private statement(value: Statement): void {
     switch (value.kind) {
       case 'while': {
         const conditionPc = this.code.length;
         this.expression(value.condition);
         const exit = this.emit({ op: 'branch', when: false, target: 0 }, value.at);
-        this.scoped([value.body], value.body.at);
+        this.loopBody(value.body);
         this.emit({ op: 'while-yield' }, value.at);
         this.emit({ op: 'jump', target: conditionPc }, value.at);
         this.patch(exit, this.code.length);
@@ -537,7 +626,7 @@ class Compiler {
           this.expression(value.condition);
           exit = this.emit({ op: 'branch', when: false, target: 0 }, value.at);
         }
-        this.scoped([value.body], value.body.at);
+        this.loopBody(value.body);
         if (value.update) {
           this.expression(value.update);
           this.emit({ op: 'drop' }, value.at);
@@ -560,6 +649,12 @@ class Compiler {
         }
         return;
       }
+      case 'continue': {
+        const loop = this.loops.at(-1) ?? fail('unsupported-syntax', value.at);
+        for (let depth = this.scopes.length; depth > loop.scopeDepth; depth--) this.emit({ op: 'leave' }, value.at);
+        loop.continues.push(this.emit({ op: 'jump', target: 0 }, value.at));
+        return;
+      }
       case 'empty':
         return;
       case 'block':
@@ -572,8 +667,13 @@ class Compiler {
         this.declaration(value);
         return;
       case 'expression':
-        this.expression(value.value, true);
-        this.emit({ op: 'drop' }, value.at);
+        if (this.isText(value.value)) {
+          this.textExpression(value.value);
+          this.emit({ op: 'text-drop' }, value.at);
+        } else {
+          this.expression(value.value, true);
+          this.emit({ op: 'drop' }, value.at);
+        }
         return;
       case 'call': {
         const constants = value.args.map((arg) => this.fold(arg));
@@ -600,11 +700,11 @@ class Compiler {
     if (
       this.board !== 'esp8266' &&
       ast.headers.some((header) =>
-        ['ESP8266WiFi.h', 'ESP8266WebServer.h', 'LittleFS.h'].includes(header),
+        ['ESP8266WiFi.h', 'ESP8266WebServer.h', 'LittleFS.h', 'WiFiClientSecure.h', 'UniversalTelegramBot.h'].includes(header),
       )
     )
       fail('unsupported-syntax');
-    this.functions = new Map(ast.functions.map((fn) => [fn.name, fn.result]));
+    this.functions = new Map(ast.functions.map((fn) => [fn.name, fn]));
     for (const fn of ast.functions)
       if (
         reserved.has(fn.name) ||
@@ -629,7 +729,19 @@ class Compiler {
       if (this.scopes[0]?.has(fn.name) || this.objects.has(fn.name)) fail('name-error', fn.at);
       this.functionResult = fn.result;
       functionPcs.set(fn.name, this.code.length);
-      this.scoped(fn.body, fn.at);
+      this.scopes.push(new Map());
+      this.emit({ op: 'enter' }, fn.at);
+      for (const parameter of [...fn.parameters].reverse()) {
+        const { name, valueType, at } = parameter;
+        const scope = this.scopes.at(-1) ?? fail('name-error', at);
+        if (scope.has(name) || this.objects.has(name) || reserved.has(name) || constantValue(name, this.board, at))
+          fail('name-error', at);
+        scope.set(name, { type: valueType, constant: false });
+        this.emit({ op: 'declare', name, valueType, initialized: true, constant: false, global: false }, at);
+      }
+      for (const statement of fn.body) this.statement(statement);
+      this.emit({ op: 'leave' }, fn.at);
+      this.scopes.pop();
       if (fn.result === 'void') this.emit({ op: 'function-return', value: false }, fn.at);
       else this.emit({ op: 'missing-return' }, fn.at);
     }
@@ -637,7 +749,8 @@ class Compiler {
   }
   private construct(value: ObjectDeclaration, headers: readonly string[]): void {
     const contract = LIBRARIES[value.className];
-    if (value.className === 'ESP8266WebServer' && this.board !== 'esp8266')
+    if (this.board !== 'esp8266' &&
+      (value.className === 'ESP8266WebServer' || value.className === 'WiFiClientSecure' || value.className === 'UniversalTelegramBot'))
       return fail('unsupported-syntax', value.at);
     if (!contract.header || !headers.includes(contract.header))
       return fail('unsupported-syntax', value.at);
@@ -648,11 +761,16 @@ class Compiler {
       constantValue(value.name, this.board, value.at)
     )
       return fail('name-error', value.at);
-    for (const arg of value.args) this.expression(arg);
-    this.emit(
-      { op: 'construct', name: value.name, className: value.className, arity: value.args.length },
-      value.at,
-    );
+    if (value.className === 'UniversalTelegramBot') {
+      const [token, client] = value.args;
+      if (!token || client?.kind !== 'atom' || this.objects.get(client.token) !== 'WiFiClientSecure' ||
+        [...this.objects.values()].includes('UniversalTelegramBot')) return fail('type-error', value.at);
+      this.textExpression(token);
+      this.emit({ op: 'bot-init' }, value.at);
+    } else if (value.className !== 'WiFiClientSecure') {
+      for (const arg of value.args) this.expression(arg);
+      this.emit({ op: 'construct', name: value.name, className: value.className, arity: value.args.length }, value.at);
+    }
     this.objects.set(value.name, value.className);
   }
 }

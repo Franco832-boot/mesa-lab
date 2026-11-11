@@ -6,7 +6,7 @@ import type { Token } from './lexer';
 import { parseTokens } from './parser';
 
 /** Flat project-local linking, with no filesystem/network or native compilation. */
-export function compileProjectFiles(files: readonly SourceFile[], board: BoardKind) {
+function parseProjectFiles(files: readonly SourceFile[]) {
   const visited = new Set<string>(), visiting = new Set<string>();
   const result: Token[] = [];
   let length = 0;
@@ -33,5 +33,19 @@ export function compileProjectFiles(files: readonly SourceFile[], board: BoardKi
   // helpers whose filename differs from the included header.
   for (const file of files) if (file.name.endsWith('.cpp')) visit(file.name);
   result.push(end);
-  return compileAst(parseTokens(result), board);
+  return parseTokens(result);
+}
+
+export function compileProjectFiles(files: readonly SourceFile[], board: BoardKind) {
+  return compileAst(parseProjectFiles(files), board);
+}
+
+export function usesTelegramBot(files: readonly SourceFile[]): boolean {
+  try {
+    const sketch = parseProjectFiles(files);
+    return sketch.headers.includes('UniversalTelegramBot.h') &&
+      sketch.globals.some((item) => item.kind === 'construct' && item.className === 'UniversalTelegramBot');
+  } catch {
+    return false;
+  }
 }

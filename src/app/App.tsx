@@ -57,7 +57,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const libraryOpen = tools.open;
   const setLibraryOpen = tools.setOpen;
   const { projectsOpen, setProjectsOpen } = tools;
-  const [webRevealSequence, setWebRevealSequence] = useState(0);
+  const [previewRevealSequence, setPreviewRevealSequence] = useState(0);
   const [pendingExample, setPendingExample] = useState<ExampleId | null>(null);
   const [pendingProject, setPendingProject] = useState<ProjectChoice | null>(null);
   const projectCopies = useProjectCopies(projectsOpen, revision);
@@ -306,11 +306,17 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     setConsoleOpen(serial);
     load(source);
   };
+  const revealCodePreview = () => {
+    setToolTab('code');
+    setLibraryOpen(true);
+    setPreviewRevealSequence((value) => value + 1);
+  };
   const installExample = (id: ExampleId) => {
     try {
       const definition = projectExamples.find((example) => example.id === id);
       if (!definition) throw new Error('unknown-example');
       replaceWorkspace(serializeProject(createExampleProject(id, t(definition.name))), { fit: true, serial: id === 'dht11' });
+      if (id === 'esp-chat-led') revealCodePreview();
       setPendingExample(null);
       setNotice('exampleLoaded');
     } catch {
@@ -725,7 +731,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           />
         </main>
         <ToolSidebar
-          expandSequence={webRevealSequence}
+          expandSequence={previewRevealSequence}
           canvasRef={stageRef}
           canvasVersion={`${project.id}-${revision}`}
           onDockChange={setToolDockOffset}
@@ -768,7 +774,12 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                   running: simulation.status === 'running',
                   request: (path) => simulation.requestFirmwareHttp(boardContext.activeBoard?.id ?? '', path, simulation.firmware[boardContext.activeBoard?.id ?? '']?.session),
                 } : undefined}
-                onRevealWeb={() => { setToolTab('code'); setLibraryOpen(true); setWebRevealSequence((value) => value + 1); }}
+                chat={boardContext.activeBoard?.kind === 'esp8266' ? {
+                  status: simulation.status,
+                  telegram: simulation.firmware[boardContext.activeBoard.id]?.execution?.telegram ?? null,
+                  send: (chatId, text) => simulation.sendFirmwareChat(boardContext.activeBoard?.id ?? '', chatId, text),
+                } : undefined}
+                onRevealPreview={revealCodePreview}
                 boards={boardContext.boards}
                 activeBoard={boardContext.activeBoard}
                 program={project.programs.find(

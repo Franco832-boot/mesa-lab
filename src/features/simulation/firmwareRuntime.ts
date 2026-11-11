@@ -1,3 +1,4 @@
+import { enqueueTelegram } from '../../firmware/telegram';
 import type { VirtualWifiNetwork } from '../../firmware/wifi';
 import type { SerialState } from '../../firmware/serial';
 import { compileProjectFiles } from '../../firmware/projectCompiler';
@@ -75,6 +76,7 @@ export interface BoardExecution {
 }
 export type FirmwareState = Readonly<Record<string, BoardExecution>>;
 export type FirmwareEvent =
+  | { type: 'firmware-chat'; componentId: string; chatId: string; text: string }
   | { type: 'firmware-clear-serial'; componentId: string }
   | { type: 'firmware-http'; componentId: string; path: string; session?: FirmwareSession }
   | { type: 'firmware-run'; componentId: string; source: string; wifiNetwork?: VirtualWifiNetwork }
@@ -105,6 +107,16 @@ export function transitionFirmware(
   event: FirmwareEvent,
   project: CircuitProject,
 ): SimulationState {
+  if (event.type === 'firmware-chat') {
+    const instance = ownInput(previous.firmware, event.componentId);
+    const execution = instance?.execution;
+    if (previous.status !== 'running' || !instance || !execution?.telegram) return previous;
+    const telegram = enqueueTelegram(execution.telegram, event.chatId, event.text);
+    if (telegram === execution.telegram) return previous;
+    return { ...previous, firmware: { ...previous.firmware, [event.componentId]: {
+      ...instance, execution: { ...execution, telegram },
+    } } };
+  }
   if (event.type === 'firmware-clear-serial') {
     const instance = ownInput(previous.firmware, event.componentId);
     const serial = instance?.execution?.serial ?? instance?.serial;

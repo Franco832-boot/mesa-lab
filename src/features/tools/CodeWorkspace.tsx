@@ -1,3 +1,4 @@
+import type { EspChatRuntime } from './EspChatSimulation';
 import type { EspWebRuntime } from './EspWebPreview';
 import type { FirmwareSession } from '../simulation/firmwareRuntime';
 import { useRef, useState } from 'react';
@@ -22,7 +23,8 @@ export function CodeWorkspace({
   saveStatus = 'saved',
   onClose,
   web,
-  onRevealWeb,
+  chat,
+  onRevealPreview,
 }: {
   boards: readonly ContextBoard[];
   activeBoard: ContextBoard | undefined;
@@ -34,7 +36,8 @@ export function CodeWorkspace({
   saveStatus?: 'saving' | 'saved' | 'error';
   onClose?: () => void;
   web?: EspWebRuntime | undefined;
-  onRevealWeb?: (() => void) | undefined;
+  chat?: EspChatRuntime | undefined;
+  onRevealPreview?: (() => void) | undefined;
 }) {
   const { t } = useLocale();
   const openedSessions = useRef(new WeakSet<FirmwareSession>());
@@ -124,7 +127,8 @@ export function CodeWorkspace({
             onChange={onChange}
             onFileAction={onFileAction}
             web={web}
-            onRevealWeb={onRevealWeb}
+            chat={chat}
+            onRevealPreview={onRevealPreview}
             openedSessions={openedSessions.current}
           /> : <CodeFilesEditor
             key={activeBoard.id}

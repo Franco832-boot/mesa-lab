@@ -1,7 +1,7 @@
 import { fail, MAX_SOURCE_LENGTH } from './errors';
 import type { SourceSpan } from './errors';
 import { LIBRARIES } from './libraries';
-const supportedHeaders = new Set(['Arduino.h', ...Object.values(LIBRARIES).flatMap((library) => library.header ? [library.header] : [])]);
+const supportedHeaders = new Set(['Arduino.h', 'ArduinoJson.h', ...Object.values(LIBRARIES).flatMap((library) => library.header ? [library.header] : [])]);
 
 export interface Token {
   kind: 'name' | 'number' | 'string' | 'header' | 'include' | 'define' | 'symbol' | 'end';
@@ -68,7 +68,7 @@ export function tokenize(source: string, file?: string, localIncludes = false): 
     const name = /^[A-Za-z_][A-Za-z_0-9]*/.exec(rest);
     const number = /^(?:0[xX][0-9a-fA-F]+(?:[uU][lL]?|[lL][uU]?)?|(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+[eE][+-]?[0-9]+)(?:[eE][+-]?[0-9]+)?[fF]?|[0-9]+[fF]|[0-9]+(?:[uU][lL]?|[lL][uU]?)?)/.exec(rest);
     const string = /^"(?:[^"\\\r\n]|\\["\\nrt])*"/.exec(rest);
-    const symbol = /^(?:\+\+|--|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|&&|\|\||[.(){};,=+\-*/%!<>])/.exec(rest);
+    const symbol = /^(?:\+\+|--|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|&&|\|\||[.(){}\[\]?:;,=+\-*/%!<>])/.exec(rest);
     const text = name?.[0] ?? number?.[0] ?? string?.[0] ?? symbol?.[0];
     if (!text) fail('unsupported-syntax', at);
     tokens.push({ kind: name ? 'name' : number ? 'number' : string ? 'string' : 'symbol', text, at });
