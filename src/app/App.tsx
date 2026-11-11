@@ -11,7 +11,7 @@ import type { LedColor } from '../model/components';
 import { screenToWorld } from '../model/coordinates';
 import { useCircuitEditor } from '../features/project/useCircuitEditor';
 import { WireInspector } from '../features/components/WireInspector';
-import { createEmptyProject, MAX_PROJECT_BYTES, parseProject, serializeProject } from '../model/project';
+import { MAX_PROJECT_BYTES, parseProject, serializeProject } from '../model/project';
 import { sourceFiles } from '../model/programFiles';
 import { useProject } from '../features/project/useProject';
 import { ComponentLibrary } from '../features/components/ComponentLibrary';
@@ -19,13 +19,15 @@ import { Inspector } from '../features/components/Inspector';
 import { ContextualInspector } from '../features/components/ContextualInspector';
 import { ToolSidebar } from '../features/tools/ToolSidebar';
 import { ProjectLibrary } from '../features/examples/ProjectLibrary';
-import { createExampleProject, projectExamples } from '../model/exampleProjects';
-import type { ExampleId } from '../model/exampleProjects';
-import { preserveBeforeExample, readProjectCopy } from '../features/examples/replacement';
+import { preserveBeforeExample } from '../features/examples/replacement';
+import { examplePaths, localProjectPath } from './projectRoutes';
+import { useProjectRoutes } from './useProjectRoutes';
 import { useProjectCopies } from '../features/examples/useProjectCopies';
 import { useWorkspaceTools } from '../features/tools/useWorkspaceTools';
 import { useBoardContext } from '../features/tools/useBoardContext';
 import { CodeWorkspace } from '../features/tools/CodeWorkspace';
+import { simulationPreview } from '../features/tools/simulationPreview';
+import type { PreviewRequest } from '../features/tools/simulationPreview';
 import { Workspace } from '../features/workspace/Workspace';
 import { useSimulation } from '../features/simulation/useSimulation';
 import { ownInput } from '../sim/topology';
@@ -34,8 +36,6 @@ import { statusMessages } from '../features/simulation/messages';
 import { SimulationConsole } from '../features/simulation/SimulationConsole';
 import { componentScreenBounds } from '../features/components/inspectorPlacement';
 import { CodeExportDialog } from '../features/codeExport/CodeExportDialog';
-
-type ProjectChoice = { kind: 'new' } | { kind: 'saved'; key: string };
 
 export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const { t, locale, setLocale } = useLocale();
@@ -58,8 +58,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const setLibraryOpen = tools.setOpen;
   const { projectsOpen, setProjectsOpen } = tools;
   const [previewRevealSequence, setPreviewRevealSequence] = useState(0);
-  const [pendingExample, setPendingExample] = useState<ExampleId | null>(null);
-  const [pendingProject, setPendingProject] = useState<ProjectChoice | null>(null);
+  const [previewRequest, setPreviewRequest] = useState<PreviewRequest | undefined>();
   const projectCopies = useProjectCopies(projectsOpen, revision);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const toolTab = tools.tab;
@@ -285,7 +284,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       if (file.size > MAX_PROJECT_BYTES) throw new Error('project-too-large');
       const source = await file.text();
       if (lockedRef.current) return;
-      replaceWorkspace(source, { fit: false, serial: false });
+      const next = replaceWorkspace(source, { fit: false, serial: false });
+      routes.adoptLocal(next);
       setNotice('importSuccess');
     } catch {
       setNotice('importError');
@@ -304,42 +304,23 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     setHighlightedIds([]);
     setTool('select');
     setConsoleOpen(serial);
-    load(source);
+    setPreviewRequest(undefined);
+    return load(source);
   };
   const revealCodePreview = () => {
     setToolTab('code');
     setLibraryOpen(true);
     setPreviewRevealSequence((value) => value + 1);
   };
-  const installExample = (id: ExampleId) => {
-    try {
-      const definition = projectExamples.find((example) => example.id === id);
-      if (!definition) throw new Error('unknown-example');
-      replaceWorkspace(serializeProject(createExampleProject(id, t(definition.name))), { fit: true, serial: id === 'dht11' });
-      if (id === 'esp-chat-led') revealCodePreview();
-      setPendingExample(null);
-      setNotice('exampleLoaded');
-    } catch {
-      setNotice('exampleLoadError');
-    }
-  };
-  const openExample = (id: ExampleId) => {
-    if (!saved) setPendingExample(id);
-    else installExample(id);
-  };
-  const installProject = (choice: ProjectChoice) => {
-    try {
-      const next = choice.kind === 'new' ? createEmptyProject(t('untitledProject')) : readProjectCopy(localStorage, choice.key);
-      replaceWorkspace(serializeProject(next), { fit: false, serial: false });
-      if (choice.kind === 'new') setToolTab('components');
-      setPendingProject(null);
-      setNotice(choice.kind === 'new' ? 'projectCreated' : 'savedProjectOpened');
-    } catch { setNotice('projectSwitchError'); }
-  };
-  const openProject = (choice: ProjectChoice) => {
-    if (!saved) setPendingProject(choice);
-    else installProject(choice);
-  };
+  const routes = useProjectRoutes({ project, saved, t,
+    onHome: () => setProjectsOpen(true),
+    install: (next, route) => {
+      replaceWorkspace(serializeProject(next), { fit: route.kind === 'example', serial: route.kind === 'example' && route.id === 'dht11' });
+      if (route.kind === 'new') setToolTab('components');
+      if (route.kind === 'example' && route.id === 'esp-chat-led') revealCodePreview();
+      setNotice(route.kind === 'example' ? 'exampleLoaded' : route.kind === 'new' ? 'projectCreated' : 'savedProjectOpened');
+    },
+  });
   const renderInspector = (components: ElectronicComponent[], wires: Wire[]) =>
     inspectorVisible ? (
       <ContextualInspector
@@ -532,6 +513,12 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
               setConnectionRequest(null);
               setConsoleOpen(true);
               simulation.start();
+              const preview = simulationPreview(project);
+              if (preview) {
+                boardContext.selectBoard(preview.boardId);
+                setPreviewRequest((previous) => ({ ...preview, sequence: (previous?.sequence ?? 0) + 1 }));
+                revealCodePreview();
+              }
               if (simulation.status === 'stopped') {
                 for (const board of boardContext.boards) {
                   const program = project.programs.find((item) => item.componentId === board.id);
@@ -582,6 +569,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         <main className="workspace-main">
           <div className="editor-toolbar">
             <div className="tool-group">
+              <a className="icon-button" href="/" aria-label={t('routeHome')} title={t('routeHome')}
+                onClick={(event) => { event.preventDefault(); routes.navigate('/'); }}><Icon name="folder" /></a>
               <button
                 className={`icon-button ${projectsOpen ? 'active-subtle' : ''}`}
                 ref={libraryToggleRef}
@@ -681,8 +670,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             </div>
           </div>
           <div className="workspace-area">
-          <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={openExample}
-            onCreate={() => openProject({ kind: 'new' })} onOpenCopy={(key) => openProject({ kind: 'saved', key })}
+          <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={(id) => routes.navigate(examplePaths[id])}
+            onCreate={() => routes.navigate('/new')} onOpenCopy={(key, name) => routes.navigate(localProjectPath(name, key))}
             copies={projectCopies.copies} copiesError={projectCopies.error} activeName={project.name} />
           <Workspace
             key={`${project.id}-${revision}`}
@@ -768,6 +757,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             ),
             code: (
               <CodeWorkspace
+                previewRequest={previewRequest}
                 web={boardContext.activeBoard?.kind === 'esp8266' ? {
                   session: simulation.firmware[boardContext.activeBoard.id]?.session,
                   execution: simulation.firmware[boardContext.activeBoard.id]?.execution ?? null,
@@ -810,6 +800,9 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           }}
         />
       </div>
+      {routes.error && <div className="route-error" role="alert" data-testid="route-error">
+        <span>{t(routes.error)}</span><a href="/" onClick={(event) => { event.preventDefault(); routes.navigate('/'); }}>{t('routeHome')}</a>
+      </div>}
       <footer className="app-footer">
         <span className="privacy-note">
           <span className="privacy-dot" />
@@ -846,19 +839,12 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       {codeExport && <CodeExportDialog project={codeExport} initialBoardId={boardContext.activeBoard?.id}
         onClose={() => setCodeExport(null)} onDownloaded={() => { setCodeExport(null); setNotice('codeExportSuccess'); }} />}
-      {pendingExample && <Dialog title={t('replaceExampleTitle')} onClose={() => setPendingExample(null)} className="reset-dialog">
-        <p className="dialog-intro">{t('replaceExampleDetail')}</p>
+      {routes.pending && <Dialog title={t('replaceExampleTitle')} onClose={routes.cancel} className="reset-dialog">
+        <p className="dialog-intro">{t(routes.pending.kind === 'example' ? 'replaceExampleDetail' : 'replaceProjectDetail')}</p>
         <div className="dialog-actions">
-          <button className="secondary-button" onClick={() => setPendingExample(null)}>{t('cancel')}</button>
-          <button className="primary-button" data-testid="confirm-example" onClick={() => installExample(pendingExample)}>{t('openExample')}</button>
-        </div>
-      </Dialog>}
-      {pendingProject && <Dialog title={t('replaceExampleTitle')} onClose={() => setPendingProject(null)} className="reset-dialog">
-        <p className="dialog-intro">{t('replaceProjectDetail')}</p>
-        <div className="dialog-actions">
-          <button className="secondary-button" onClick={() => setPendingProject(null)}>{t('cancel')}</button>
-          <button className="primary-button" data-testid="confirm-project" onClick={() => installProject(pendingProject)}>
-            {t(pendingProject.kind === 'new' ? 'createProject' : 'openSavedProject')}
+          <button className="secondary-button" onClick={routes.cancel}>{t('cancel')}</button>
+          <button className="primary-button" data-testid={routes.pending.kind === 'example' ? 'confirm-example' : 'confirm-project'} onClick={routes.confirm}>
+            {t(routes.pending.kind === 'example' ? 'openExample' : routes.pending.kind === 'new' ? 'createProject' : 'openSavedProject')}
           </button>
         </div>
       </Dialog>}
@@ -880,7 +866,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                 if (locked) return;
                 try {
                   preserveBeforeExample(localStorage, project);
-                  reset();
+                  const next = reset();
+                  routes.adoptLocal(next);
                   setFitOnMount(true);
                   editor.clearSelection();
                   setConnectionRequest(null);

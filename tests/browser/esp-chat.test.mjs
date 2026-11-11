@@ -18,7 +18,7 @@ for (const width of [1440, 390]) {
       return route.abort();
     });
     const example = page.getByTestId('example-esp-chat-led');
-    await example.getByRole('button').click();
+    await example.getByRole('link').click();
     const confirmation = page.getByTestId('confirm-example');
     if (await confirmation.isVisible()) await confirmation.click();
     await page.locator('[data-reference="esp"]').waitFor({ state: 'attached' });

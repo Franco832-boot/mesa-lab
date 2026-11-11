@@ -11,7 +11,7 @@ async function load(page, id) {
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('Project saved in this browser.', { exact: true }).waitFor();
   if (await page.getByTestId('library-toggle').getAttribute('aria-expanded') === 'false') await page.getByTestId('library-toggle').click();
-  await page.getByTestId(`example-${id}`).getByRole('button').click();
+  await page.getByTestId(`example-${id}`).getByRole('link').click();
   await page.locator('[data-reference="lcd"]').waitFor();
 }
 for (const id of ['lcd16-parallel','lcd20-parallel','lcd16-i2c','lcd20-i2c']) {

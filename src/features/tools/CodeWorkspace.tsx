@@ -11,6 +11,7 @@ import { CodeFilesEditor } from './CodeFilesEditor';
 import { EspProjectEditor } from './EspProjectEditor';
 import type { ContextBoard } from './boardContext';
 import { boardDisplayLabel } from './boardContext';
+import type { PreviewRequest } from './simulationPreview';
 
 export function CodeWorkspace({
   boards,
@@ -25,6 +26,7 @@ export function CodeWorkspace({
   web,
   chat,
   onRevealPreview,
+  previewRequest,
 }: {
   boards: readonly ContextBoard[];
   activeBoard: ContextBoard | undefined;
@@ -38,6 +40,7 @@ export function CodeWorkspace({
   web?: EspWebRuntime | undefined;
   chat?: EspChatRuntime | undefined;
   onRevealPreview?: (() => void) | undefined;
+  previewRequest?: PreviewRequest | undefined;
 }) {
   const { t } = useLocale();
   const openedSessions = useRef(new WeakSet<FirmwareSession>());
@@ -130,6 +133,7 @@ export function CodeWorkspace({
             chat={chat}
             onRevealPreview={onRevealPreview}
             openedSessions={openedSessions.current}
+            previewRequest={previewRequest?.boardId === activeBoard.id ? previewRequest : undefined}
           /> : <CodeFilesEditor
             key={activeBoard.id}
             board={activeBoard}

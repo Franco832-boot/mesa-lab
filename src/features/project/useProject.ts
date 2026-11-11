@@ -24,8 +24,10 @@ export function useProject() {
     return parsed;
   };
   const reset = () => {
-    dispatch(projectReplaced(createProject()));
+    const next = createProject();
+    dispatch(projectReplaced(next));
     setRevision((previous) => previous + 1);
+    return next;
   };
   return {
     project,

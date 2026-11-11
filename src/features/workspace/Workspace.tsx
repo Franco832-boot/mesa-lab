@@ -289,10 +289,10 @@ export function Workspace(props: WorkspaceProps) {
         </svg>
       </div>
       {props.inspector?.(components, wires)}
-      <div className="reference-notice" role="status">
+      {(interaction.insertionInvalid || interaction.insertionHoles.length > 0 || props.locked || tool === 'connect') && <div className="reference-notice" role="status">
         <Icon name="info" size={14} />
-        {t(interaction.insertionInvalid ? 'breadboardInvalidPlacement' : interaction.insertionHoles.length ? 'breadboardPlacementReady' : props.locked ? 'simulationLocked' : tool === 'connect' ? (draft ? 'chooseDestination' : 'chooseOrigin') : 'referenceOnly')}
-      </div>
+        {t(interaction.insertionInvalid ? 'breadboardInvalidPlacement' : interaction.insertionHoles.length ? 'breadboardPlacementReady' : props.locked ? 'simulationLocked' : draft ? 'chooseDestination' : 'chooseOrigin')}
+      </div>}
       <div className="canvas-controls" style={{ bottom: props.inspectorDockOffset || undefined }}>
         <button
           className={`icon-button ${grid ? 'active-subtle' : ''}`}

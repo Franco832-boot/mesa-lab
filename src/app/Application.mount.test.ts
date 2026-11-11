@@ -5,6 +5,9 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Application } from './Application';
 import { createAppStore } from './store';
+import { createEmptyProject, STORAGE_KEY } from '../model/project';
+import { EXAMPLE_BACKUP_PREFIX } from '../features/examples/replacement';
+import { nameChanged } from '../features/project/projectSlice';
 
 let root: Root | undefined;
 let application: ReturnType<typeof createAppStore> | undefined;
@@ -12,6 +15,7 @@ let container: HTMLDivElement;
 let errors: unknown[];
 beforeEach(() => {
   localStorage.clear();
+  window.history.replaceState(null, '', '/');
   errors = [];
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -80,5 +84,54 @@ describe('real application provider hierarchy', () => {
     await mount();
     expect(languageSelector().value).toBe('en');
     expect(container.textContent).toContain('Components');
+  });
+});
+
+describe('routing after Redux Persist rehydration', () => {
+  it('opens a public deep link, preserves a legacy session, and retains edits on reload', async () => {
+    const legacy = createEmptyProject('Legacy session');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+    window.history.replaceState(null, '', '/esp8266-led-telegram');
+    await mount();
+    expect(application?.store.getState().project.document.components.some((component) => component.kind === 'esp8266')).toBe(true);
+    expect(Object.keys(localStorage).filter((key) => key.startsWith(EXAMPLE_BACKUP_PREFIX))).toHaveLength(1);
+    await act(async () => { application?.store.dispatch(nameChanged('Edited local template')); });
+    const id = application?.store.getState().project.document.id;
+    // Rehydrate the exact current document as a page reload would do.
+    await act(async () => root?.unmount());
+    await application?.saveNow();
+    application?.persistor.pause();
+    await mount();
+    expect(application?.store.getState().project.document.id).toBe(id);
+    expect(application?.store.getState().project.document.name).toBe('Edited local template');
+    expect(Object.keys(localStorage).filter((key) => key.startsWith(EXAMPLE_BACKUP_PREFIX))).toHaveLength(1);
+    expect(window.location.pathname).toBe('/esp8266-led-telegram');
+  });
+  it('creates /new once and reloads its canonical local document', async () => {
+    window.history.replaceState(null, '', '/new');
+    await mount();
+    const next = application?.store.getState().project.document;
+    expect(next?.components).toEqual([]);
+    expect(window.location.pathname).toMatch(/^\/local\/[^/]+\/[^/]+$/);
+    const path = window.location.pathname;
+    await act(async () => root?.unmount());
+    await application?.saveNow();
+    application?.persistor.pause();
+    await mount();
+    expect(window.location.pathname).toBe(path);
+    expect(application?.store.getState().project.document).toEqual(next);
+  });
+  it.each(['/unknown', '/local/private/missing-id'])('shows a recoverable error for %s without replacing the restored document', async (path) => {
+    const previous = createEmptyProject('Private project');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(previous));
+    window.history.replaceState(null, '', path);
+    await mount();
+    expect(container.querySelector('[data-testid="route-error"]')).not.toBeNull();
+    expect(application?.store.getState().project.document).toEqual(previous);
+    const home = container.querySelector('[data-testid="route-error"] a');
+    if (!(home instanceof HTMLAnchorElement)) throw new Error('Missing recovery link');
+    await act(async () => home.click());
+    expect(window.location.pathname).toBe('/');
+    expect(container.querySelector('[data-testid="route-error"]')).toBeNull();
   });
 });

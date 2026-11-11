@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PreviewRequest } from './simulationPreview';
 import { EspChatSimulation } from './EspChatSimulation';
 import type { EspChatRuntime } from './EspChatSimulation';
 import { usesTelegramBot } from '../../firmware/projectCompiler';
@@ -21,7 +22,7 @@ const labels: Record<EditorSection, TranslationKey> = {
   main: 'espCodeMain', wifi: 'espCodeWifi', functions: 'espCodeFunctions',
   server: 'espCodeServer', html: 'espCodeHtml', web: 'espWebView', chat: 'espChatTab',
 };
-export function EspProjectEditor({ board, program, explorerOpen, onToggleExplorer, onChange, onFileAction, web, chat, onRevealPreview, openedSessions }: {
+export function EspProjectEditor({ board, program, explorerOpen, onToggleExplorer, onChange, onFileAction, web, chat, onRevealPreview, openedSessions, previewRequest }: {
   board: ContextBoard;
   program: BoardProgram | undefined;
   explorerOpen: boolean;
@@ -32,6 +33,7 @@ export function EspProjectEditor({ board, program, explorerOpen, onToggleExplore
   chat: EspChatRuntime | undefined;
   onRevealPreview: (() => void) | undefined;
   openedSessions: WeakSet<FirmwareSession>;
+  previewRequest: PreviewRequest | undefined;
 }) {
   const { t } = useLocale();
   const [utility, setUtility] = useState<'web' | 'chat' | null>(null);
@@ -41,6 +43,12 @@ export function EspProjectEditor({ board, program, explorerOpen, onToggleExplore
   const sections = hasChat ? chatSections : ESP_CODE_SECTIONS;
   const active = utility === 'chat' && !hasChat ? activeEspSection(program) : utility ?? activeEspSection(program);
   const prefix = `esp-code-${encodeURIComponent(board.id)}`;
+  useEffect(() => {
+    if (previewRequest && (previewRequest.section !== 'chat' || hasChat)) setUtility(previewRequest.section);
+  }, [previewRequest, hasChat]);
+  useEffect(() => {
+    tabs.current.get(active)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+  }, [active]);
   const choose = (section: EditorSection) => {
     if (section === 'web' || section === 'chat') { setUtility(section); setError(false); onRevealPreview?.(); return; }
     const success = onFileAction?.(openEspSection(section, program)) ?? false;
@@ -65,7 +73,7 @@ export function EspProjectEditor({ board, program, explorerOpen, onToggleExplore
     {error && <p role="alert" className="iot-error">{t('codeFileError')}</p>}
     <div className="esp-code-section-panel" role="tabpanel" id={`${prefix}-panel`} aria-labelledby={`${prefix}-${active}`}>
       {web && <EspWebPreview {...web} visible={active === 'web'} openedSessions={openedSessions}
-        onAutoOpen={() => { setUtility('web'); onRevealPreview?.(); }} onClose={() => setUtility(null)} />}
+        onAutoOpen={() => { if (!hasChat) { setUtility('web'); onRevealPreview?.(); } }} onClose={() => setUtility(null)} />}
       {active === 'web' && !web && <p>{t('espWebUnavailable')}</p>}
       {active === 'chat' && <EspChatSimulation key={chat?.status === 'stopped' ? 'stopped' : 'session'} runtime={chat} />}
       {active === 'web' || active === 'chat' ? null : <CodeFilesEditor board={board} program={program} section={active}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { RefObject } from 'react';
+import type { MouseEvent, RefObject } from 'react';
+import { examplePaths, localProjectPath } from '../../app/projectRoutes';
 import { useLocale } from '../../locales/useLocale';
 import { Icon } from '../../shared/Icon';
 import { WorkspaceSidebar } from '../tools/WorkspaceSidebar';
@@ -14,13 +15,17 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
   onOpen: (id: ExampleId) => void;
   canvasVersion: string;
   onCreate: () => void;
-  onOpenCopy: (key: string) => void;
+  onOpenCopy: (key: string, name: string) => void;
   copies: readonly ProjectCopy[];
   copiesError: boolean;
   activeName: string;
 }) {
   const { t } = useLocale();
   const [width, setWidth] = useState(280);
+  const follow = (event: MouseEvent<HTMLAnchorElement>, action: () => void) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); action();
+  };
   return <WorkspaceSidebar side="left" id="example-projects" testId="project-library" controlPrefix="projects"
     open={open} onClose={onClose} width={width} onWidth={setWidth} canvasRef={canvasRef} canvasVersion={canvasVersion}
     label={t('projects')} resizeLabel={t('resizeProjects')}
@@ -32,17 +37,17 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
       <article className="project-card project-start-card" data-testid="create-project-card" aria-labelledby="create-project-title">
         <h3 id="create-project-title">{t('createNewProjectTitle')}</h3>
         <p>{t('createNewProjectDescription')}</p>
-        <button className="secondary-button" data-testid="create-project" onClick={onCreate}><Icon name="plus" size={14} />{t('createProject')}</button>
+        <a href="/new" className="secondary-button" data-testid="create-project" onClick={(event) => follow(event, onCreate)}><Icon name="plus" size={14} />{t('createProject')}</a>
         <details className="saved-projects" data-testid="saved-projects">
           <summary>{t('savedProjects')} ({copies.length + 1})</summary>
           <ul>
             <li className="saved-project-current"><strong>{activeName || t('untitledProject')}</strong><small>{t('currentProject')}</small></li>
             {copies.map((copy, index) => <li key={copy.key}>
-              <button type="button" className="text-button" data-testid="open-project-copy" data-copy-key={copy.key}
+              <a href={localProjectPath(copy.name, copy.key)} className="text-button" data-testid="open-project-copy" data-copy-key={copy.key}
                 aria-label={`${t('openSavedProject')}: ${copy.name || t('untitledProject')} · ${t('projectCopy')} ${index + 1}`}
-                onClick={() => onOpenCopy(copy.key)}>
+                onClick={(event) => follow(event, () => onOpenCopy(copy.key, copy.name))}>
                 <span>{copy.name || t('untitledProject')}</span><small>{t('projectCopy')} {index + 1}</small>
-              </button>
+              </a>
             </li>)}
           </ul>
           <p>{t('projectCopiesNote')}</p>
@@ -60,9 +65,9 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
             const entry = catalog.find((item) => item.kind === kind);
             return entry ? t(entry.name) : kind;
           }).join(' · ')}</span>
-          <button className="secondary-button" onClick={() => onOpen(example.id)} aria-label={`${t('openExample')}: ${t(example.name)}`}>
+          <a href={examplePaths[example.id]} className="secondary-button" onClick={(event) => follow(event, () => onOpen(example.id))} aria-label={`${t('openExample')}: ${t(example.name)}`}>
             <Icon name="folder" size={14} />{t('openExample')}
-          </button>
+          </a>
         </article>)}
       </section>)}
       <p className="project-library-intro">{t('exampleBackupNote')}</p>

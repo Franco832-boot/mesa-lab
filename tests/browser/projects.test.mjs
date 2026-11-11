@@ -14,7 +14,7 @@ async function save(page) {
 async function loadExample(page, id) {
   await save(page);
   if (await page.getByTestId('library-toggle').getAttribute('aria-expanded') === 'false') await page.getByTestId('library-toggle').click();
-  await page.getByTestId(`example-${id}`).getByRole('button').click();
+  await page.getByTestId(`example-${id}`).getByRole('link').click();
   await status(page, 'stopped');
   await page.locator('[data-reference="uno"]').waitFor();
 }
@@ -182,11 +182,11 @@ test('unsaved replacement can be canceled and accepted without overwriting the p
   await save(page); await virtualClock(page);
   await page.getByRole('textbox', { name: 'Project name', exact: true }).fill('Unsaved experiment');
   if (await page.getByTestId('library-toggle').getAttribute('aria-expanded') === 'false') await page.getByTestId('library-toggle').click();
-  await page.getByTestId('example-led-for').getByRole('button').click();
+  await page.getByTestId('example-led-for').getByRole('link').click();
   const dialog = page.getByRole('dialog', { name: 'Replace the current project?', exact: true });
   await dialog.waitFor(); await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await page.locator('[data-reference]').count(), 0);
-  await page.getByTestId('example-led-for').getByRole('button').click();
+  await page.getByTestId('example-led-for').getByRole('link').click();
   await page.getByTestId('confirm-example').click();
   await page.locator('[data-reference="led"]').waitFor();
   const copies = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('mesa.project.before-example.v1:')).map((key) => JSON.parse(localStorage.getItem(key))));

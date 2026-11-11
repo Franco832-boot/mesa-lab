@@ -21,7 +21,7 @@ async function save(page, locale) {
 async function example(page, locale) {
   await save(page, locale);
   if (await page.getByTestId('library-toggle').getAttribute('aria-expanded') === 'false') await page.getByTestId('library-toggle').click();
-  await page.getByTestId('example-esp-web-led').getByRole('button').click();
+  await page.getByTestId('example-esp-web-led').getByRole('link').click();
   await page.locator('[data-reference="esp"]').waitFor();
   await openCode(page);
   await page.getByTestId('esp-code-tab-html').click();
