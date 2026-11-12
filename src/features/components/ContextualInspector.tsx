@@ -5,6 +5,7 @@ import { useLocale } from '../../locales/useLocale';
 import { Icon } from '../../shared/Icon';
 import { inspectorAnchor, placeInspector } from './inspectorPlacement';
 import { useCompactLayout } from '../../shared/useCompactLayout';
+import { WorkspaceSidebar } from '../tools/WorkspaceSidebar';
 
 interface ContextualInspectorProps {
   components: readonly ElectronicComponent[];
@@ -30,6 +31,7 @@ export function ContextualInspector({
   const [headingHeight, setHeadingHeight] = useState(64);
   const mobile = useCompactLayout();
   useEffect(() => {
+    if (mobile) return;
     const stage = stageRef.current;
     if (!stage) return;
     const measure = () => {
@@ -45,7 +47,7 @@ export function ContextualInspector({
       observer?.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [stageRef]);
+  }, [stageRef, mobile]);
   useLayoutEffect(() => {
     const surface = panel.current?.querySelector('.inspector-panel');
     const heading = surface?.querySelector('.panel-heading');
@@ -74,21 +76,20 @@ export function ContextualInspector({
     observer?.observe(content);
     for (const child of surface.children) if (child !== scroll) observer?.observe(child);
     return () => observer?.disconnect();
-  }, [componentId, wireId, collapsed, canvas.width, canvas.height]);
+  }, [componentId, wireId, collapsed, canvas.width, canvas.height, mobile]);
   const anchor = useMemo(() => inspectorAnchor(components, wires, viewport, componentId, wireId),
     [components, wires, viewport, componentId, wireId]);
-  const rect = useMemo(() => anchor ? placeInspector(canvas, anchor, collapsed, mobile, collapsed ? headingHeight : naturalHeight) : null,
+  const rect = useMemo(() => anchor && !mobile ? placeInspector(canvas, anchor, collapsed, false, collapsed ? headingHeight : naturalHeight) : null,
     [canvas, anchor, collapsed, mobile, headingHeight, naturalHeight]);
   useEffect(() => {
-    onSheetDockChange(mobile && rect ? Math.max(8, Math.min(canvas.height - 44, rect.height + 20)) : 0);
-  }, [mobile, rect, canvas.height, onSheetDockChange]);
+    onSheetDockChange(0);
+  }, [onSheetDockChange]);
   useEffect(() => () => onSheetDockChange(0), [onSheetDockChange]);
   const close = () => {
     const restoreFocus = panel.current?.contains(document.activeElement);
     onClose();
     if (restoreFocus) requestAnimationFrame(() => stageRef.current?.focus({ preventScroll: true }));
   };
-  if (!rect) return null;
   const collapseButton = (
     <button className="icon-button" type="button" data-testid="inspector-expand"
       aria-label={t(collapsed ? 'expandInspector' : 'collapseInspector')}
@@ -98,12 +99,20 @@ export function ContextualInspector({
       <Icon name={collapsed ? 'chevron' : 'down'} size={16} />
     </button>
   );
+  if (mobile) return (
+    <WorkspaceSidebar open onClose={close} id="context-inspector" testId="context-inspector"
+      label={t('contextualInspector')} resizeLabel={t('properties')} header={null} contentHasHeading
+      collapsed={collapsed} className="mobile-inspector-sheet" controlPrefix="inspector">
+      {children(collapseButton, close)}
+    </WorkspaceSidebar>
+  );
+  if (!rect) return null;
   return (
     <div className="inspector-overlay">
       <div ref={panel} id="context-inspector" data-testid="context-inspector"
         role="region" aria-label={t('contextualInspector')} tabIndex={-1}
-        data-layout={mobile ? 'bottom-sheet' : 'floating'}
-        className={`floating-inspector ${mobile ? 'is-mobile' : ''} ${collapsed ? 'is-collapsed' : ''}`}
+        data-layout="floating"
+        className={`floating-inspector ${collapsed ? 'is-collapsed' : ''}`}
         style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height,
           visibility: canvas.width > 0 && canvas.height > 0 ? 'visible' : 'hidden' }}
         onWheel={(event) => event.stopPropagation()}

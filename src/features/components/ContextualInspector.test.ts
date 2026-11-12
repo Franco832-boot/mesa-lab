@@ -21,6 +21,32 @@ afterEach(() => vi.unstubAllGlobals());
 const setLocale = (locale: string) => vi.stubGlobal('localStorage', { getItem: () => locale });
 
 describe('contextual settings surfaces', () => {
+  it.each(['es', 'en'])('uses the existing mobile panel shell with a single Inspector and header in %s', (locale) => {
+    vi.stubGlobal('window', { innerWidth: 768, matchMedia: () => ({ matches: true }) });
+    setLocale(locale);
+    const component = createComponent('resistor', { x: 200, y: 220 }, 'r');
+    const markup = renderToStaticMarkup(createElement(LocaleProvider, { children:
+      createElement(ContextualInspector, {
+        components: [component], wires: [], viewport: { zoom: 1, offset: { x: 0, y: 0 } },
+        componentId: 'r', wireId: null, stageRef: { current: null }, onClose: noop, onSheetDockChange: noop,
+        collapsed: false, onToggleCollapse: noop,
+        children: (headerActions, close) => createElement(Inspector, {
+          component, kind: 'resistor', simulation, locked: false, selectedCount: 1,
+          headerActions, onClose: close, onUpdate: noop,
+          onRotate: noop, onDuplicate: noop, onRemove: noop, onStartConnection: noop,
+        }),
+      }),
+    }));
+    expect(markup).toContain('mobile-inspector-sheet');
+    expect(markup).toContain('class="tool-sidebar panel');
+    expect(markup).not.toContain('floating-inspector');
+    expect(markup).not.toContain('inspector-overlay');
+    expect(markup.match(/id="context-inspector"/g)).toHaveLength(1);
+    expect(markup.match(/class="panel-heading"/g)).toHaveLength(1);
+    expect(markup.match(/data-testid="inspector-close"/g)).toHaveLength(1);
+    expect(markup).toContain('type="number"');
+    expect(markup).toContain('data-testid="terminal-select"');
+  });
   it('starts with a right-hand library after the main canvas and no permanent inspector', () => {
     vi.stubGlobal('window', { innerWidth: 1440, location: { pathname: '/' }, history: { state: null }, matchMedia: () => ({ matches: false }) });
     setLocale('en');

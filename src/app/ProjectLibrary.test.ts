@@ -91,6 +91,11 @@ describe('independent project library and existing right tools', () => {
     const selected = container.querySelector('[data-reference][aria-pressed="true"]');
     if (!(selected instanceof SVGElement)) throw new Error('Missing selection');
     await click(byId('mobile-panel-inspector')); await click(byId('inspector-expand'));
+    expect(element('#context-inspector').parentElement?.classList.contains('lab-layout')).toBe(true);
+    expect(element('#context-inspector').classList.contains('mobile-inspector-sheet')).toBe(true);
+    expect(container.querySelectorAll('#context-inspector')).toHaveLength(1);
+    expect(container.querySelector('.floating-inspector')).toBeNull();
+    expect(container.querySelectorAll('#context-inspector .panel-heading')).toHaveLength(1);
     expect(element('#context-inspector-body').hidden).toBe(true);
     expect(selected.getAttribute('aria-pressed')).toBe('true');
     await act(async () => { selected.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
@@ -102,7 +107,7 @@ describe('independent project library and existing right tools', () => {
     expect(element('#context-inspector-body').hidden).toBe(true);
     await act(async () => { await current.saveNow(); root?.unmount(); });
     current.persistor.pause(); await current.persistor.flush();
-    await mount();
+    const restoredApp = await mount();
     expect(control('project-library').hidden).toBe(true); expect(control('tool-sidebar').hidden).toBe(true);
     const resistor = container.querySelector('[data-reference][aria-label*="resist"]');
     const restored = container.querySelectorAll('[data-reference]')[container.querySelectorAll('[data-reference]').length - 1];
@@ -113,6 +118,15 @@ describe('independent project library and existing right tools', () => {
     expect(element('#context-inspector-body').hidden).toBe(true);
     await click(byId('inspector-expand'));
     expect(element('#context-inspector-body').hidden).toBe(false);
+    await click(byId('simulation-start'));
+    const running = serializeProject(restoredApp.store.getState().project.document);
+    await click(byId('inspector-close'));
+    expect(container.querySelector('#context-inspector')).toBeNull();
+    expect(target.getAttribute('aria-pressed')).toBe('true');
+    await click(byId('mobile-panel-inspector'));
+    expect(control('simulation-status').getAttribute('data-status')).toBe('running');
+    expect(serializeProject(restoredApp.store.getState().project.document)).toBe(running);
+    await click(byId('simulation-stop'));
     expect(errors).toEqual([]);
   });
   it('creates empty independent projects, reopens a saved circuit after reload and retains previous copies', async () => {

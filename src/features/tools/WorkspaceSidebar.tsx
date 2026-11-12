@@ -9,6 +9,7 @@ import { useLocale } from '../../locales/useLocale';
 export function WorkspaceSidebar({ open, onClose, onToggle, header, children, width = 300,
   onWidth = () => undefined, canvasRef, canvasVersion, onDockChange, side = 'right', id, label,
   resizeLabel, expandLabel, toggleLabel, testId, controlPrefix = 'sidebar', expandSequence = 0, mobileTitle,
+  contentHasHeading = false, collapsed = false, className = '',
 }: {
   open: boolean; onClose: () => void; onToggle?: () => void; header: ReactNode; children: ReactNode;
   expandSequence?: number | undefined;
@@ -18,6 +19,7 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
   id: string; label: string; resizeLabel: string; expandLabel?: string; toggleLabel?: string;
   testId: string; controlPrefix?: string;
   mobileTitle?: string;
+  contentHasHeading?: boolean; collapsed?: boolean; className?: string;
 }) {
   const { t } = useLocale();
   const compact = useCompactLayout();
@@ -58,7 +60,7 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
           <Icon name="chevron" size={20} />
         </button>
       </div>}
-      <aside ref={panelRef} id={id} className={`tool-sidebar panel tool-sidebar--${side} ${mobileExpanded ? 'is-expanded' : ''}`}
+      <aside ref={panelRef} id={id} className={`tool-sidebar panel tool-sidebar--${side} ${mobileExpanded ? 'is-expanded' : ''} ${collapsed ? 'is-collapsed' : ''} ${className}`}
         style={{ width: visibleWidth, flexBasis: visibleWidth }} data-testid={testId}
         aria-label={label} data-workspace-tool hidden={!open}
         onKeyDownCapture={(event) => {
@@ -98,7 +100,7 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
                 : event.key === 'ArrowRight' ? visibleWidth + (side === 'left' ? 16 : -16) : null;
             if (next !== null) { event.preventDefault(); onWidth(clampSidebarWidth(next, widthBudget)); }
           }} />
-        <div className="tool-sidebar-heading">
+        {!contentHasHeading && <div className="tool-sidebar-heading">
           <div className="sidebar-desktop-heading">{header}</div>
           <h2 className="mobile-panel-title">{mobileTitle ?? label}</h2>
           {expandLabel && <button className="icon-button" data-testid={`${controlPrefix}-expand`}
@@ -110,7 +112,7 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
             }}><Icon name={compact && mobileExpanded ? 'down' : 'fit'} size={18} /></button>}
           <button className="icon-button mobile-panel-close" type="button" data-testid={`${controlPrefix}-close`}
             aria-label={t('close')} title={t('close')} onClick={onClose}><Icon name="close" size={18} /></button>
-        </div>
+        </div>}
         {children}
       </aside>
     </>

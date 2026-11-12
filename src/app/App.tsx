@@ -331,7 +331,10 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         onToggleCollapse={() => tools.setInspectorCollapsed(!tools.inspectorCollapsed)}
         onClose={() => {
           setInspectorOpen(false);
-          if (tools.compact) tools.setMobilePanel(null);
+          if (tools.compact) {
+            tools.setMobilePanel(null);
+            requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-testid="mobile-panel-inspector"]')?.focus({ preventScroll: true }));
+          }
         }}
         onSheetDockChange={setInspectorDockOffset}
       >
@@ -677,7 +680,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             copies={projectCopies.copies} copiesError={projectCopies.error} activeName={project.name} />
           <Workspace
             key={`${project.id}-${revision}`}
-            inspector={renderInspector}
+            {...(!tools.compact ? { inspector: renderInspector } : {})}
             inspectorDockOffset={Math.max(inspectorDockOffset, toolDockOffset)}
             locked={locked}
             simulation={simulation}
@@ -797,6 +800,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
 
           }}
         />
+        {tools.compact && renderInspector(project.components, project.wires)}
       </div>
       <MobileWorkspaceNav active={tools.mobilePanel} hasSelection={Boolean(selectionKey)}
         onSelect={(panel) => {
