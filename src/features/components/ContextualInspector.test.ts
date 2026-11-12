@@ -22,7 +22,7 @@ const setLocale = (locale: string) => vi.stubGlobal('localStorage', { getItem: (
 
 describe('contextual settings surfaces', () => {
   it('starts with a right-hand library after the main canvas and no permanent inspector', () => {
-    vi.stubGlobal('window', { innerWidth: 1440, matchMedia: () => ({ matches: false }) });
+    vi.stubGlobal('window', { innerWidth: 1440, location: { pathname: '/' }, history: { state: null }, matchMedia: () => ({ matches: false }) });
     setLocale('en');
     const store = configureStore({ reducer: { project: projectReducer } });
     const before = store.getState();

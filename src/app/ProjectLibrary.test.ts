@@ -16,6 +16,7 @@ let container: HTMLDivElement;
 let errors: unknown[];
 beforeEach(() => {
   localStorage.clear(); errors = [];
+  window.history.replaceState(null, '', '/');
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query,
     addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
@@ -64,6 +65,56 @@ async function openProjects() {
 
 
 describe('independent project library and existing right tools', () => {
+  it.each(['es', 'en'])('keeps mobile panels exclusive, preserves the editor and restores the collapsed Inspector in %s', async (locale) => {
+    localStorage.setItem('mesa.locale', locale);
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 768px)', media: query,
+      addEventListener() {}, removeEventListener() {} }));
+    const current = await mount();
+    const original = serializeProject(current.store.getState().project.document);
+    expect(control('project-library').hidden).toBe(true);
+    expect(control('tool-sidebar').hidden).toBe(true);
+    await click(byId('mobile-panel-projects'));
+    expect(control('project-library').hidden).toBe(false);
+    await click(byId('mobile-panel-code'));
+    expect(control('project-library').hidden).toBe(true);
+    expect(control('tool-sidebar').hidden).toBe(false);
+    const editor = control('board-code-editor');
+    if (!(editor instanceof HTMLTextAreaElement)) throw new Error('Missing editor');
+    editor.setSelectionRange(2, 5);
+    await click(byId('mobile-panel-components')); await click(byId('mobile-panel-code'));
+    expect(control('board-code-editor')).toBe(editor);
+    expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 5]);
+    expect(serializeProject(current.store.getState().project.document)).toBe(original);
+    await click(byId('mobile-panel-components')); await click(byId('add-resistor'));
+    expect(control('tool-sidebar').hidden).toBe(true);
+    expect(container.querySelector('#context-inspector')).toBeNull();
+    const selected = container.querySelector('[data-reference][aria-pressed="true"]');
+    if (!(selected instanceof SVGElement)) throw new Error('Missing selection');
+    await click(byId('mobile-panel-inspector')); await click(byId('inspector-expand'));
+    expect(element('#context-inspector-body').hidden).toBe(true);
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => { selected.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
+    expect(element('#context-inspector-body').hidden).toBe(true);
+    await click(byId('mobile-panel-projects'));
+    expect(container.querySelector('#context-inspector')).toBeNull();
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    await click(byId('mobile-panel-inspector'));
+    expect(element('#context-inspector-body').hidden).toBe(true);
+    await act(async () => { await current.saveNow(); root?.unmount(); });
+    current.persistor.pause(); await current.persistor.flush();
+    await mount();
+    expect(control('project-library').hidden).toBe(true); expect(control('tool-sidebar').hidden).toBe(true);
+    const resistor = container.querySelector('[data-reference][aria-label*="resist"]');
+    const restored = container.querySelectorAll('[data-reference]')[container.querySelectorAll('[data-reference]').length - 1];
+    const target = resistor ?? restored;
+    if (!(target instanceof SVGElement)) throw new Error('Missing saved resistor');
+    await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    await click(byId('mobile-panel-inspector'));
+    expect(element('#context-inspector-body').hidden).toBe(true);
+    await click(byId('inspector-expand'));
+    expect(element('#context-inspector-body').hidden).toBe(false);
+    expect(errors).toEqual([]);
+  });
   it('creates empty independent projects, reopens a saved circuit after reload and retains previous copies', async () => {
     const current = await mount();
     const original = serializeProject(current.store.getState().project.document);
@@ -185,9 +236,7 @@ describe('independent project library and existing right tools', () => {
     expect(control('tool-tab-code').getAttribute('aria-selected')).toBe('true');
     expect(localStorage.getItem('mesa.workspace.preferences.v1')).toBe(preferences);
   });
-  it.each([false, true])('keeps the Inspector independent from both right-panel toggles, mobile=%s', async (mobile) => {
-    vi.stubGlobal('matchMedia', (query: string) => ({ matches: mobile && query === '(max-width: 760px)', media: query,
-      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
+  it('keeps the desktop Inspector independent from both right-panel toggles', async () => {
     const current = await mount();
     const uno = container.querySelector('[data-reference="uno-reference"]');
     if (!(uno instanceof SVGElement)) throw new Error('Missing board');
@@ -213,7 +262,7 @@ describe('independent project library and existing right tools', () => {
   });
   it('configures the PCF address through the existing inspector and exposes LCD results without an editable text field', async () => {
     const current = await mount();
-    await openProjects(); await click(`${byId('example-lcd16-i2c')} button`);
+    await openProjects(); await click(`${byId('example-lcd16-i2c')} a`);
     const selectPart = async (id: string) => {
       const part = container.querySelector(`[data-reference="${id}"]`);
       if (!(part instanceof SVGElement)) throw new Error('Missing circuit part');
@@ -266,7 +315,7 @@ describe('independent project library and existing right tools', () => {
   });
   it.each(['es', 'en'] as const)('opens the user guide in %s, closes it accessibly, and exposes no public roadmap', async (locale) => {
     localStorage.setItem('mesa.locale', locale);
-    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 760px)', media: query,
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 768px)', media: query,
       addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
     const current = await mount(), before = serializeProject(current.store.getState().project.document);
     expect(container.textContent).not.toMatch(/roadmap|plan de desarrollo/i);
@@ -282,14 +331,14 @@ describe('independent project library and existing right tools', () => {
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })); });
     expect(serializeProject(current.store.getState().project.document)).toBe(before);
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
-    expect(control('tool-sidebar').hidden).toBe(false);
+    expect(control('tool-sidebar').hidden).toBe(true);
     await act(async () => { dialog.dispatchEvent(new Event('cancel', { cancelable: true })); });
     expect(container.querySelector('dialog[open]')).toBeNull(); expect(document.activeElement).toBe(help);
     await click('.help-button'); await click('dialog .dialog-done');
     expect(container.querySelector('dialog[open]')).toBeNull();
     await click('.help-button'); await click('dialog .dialog-heading button');
     expect(container.querySelector('dialog[open]')).toBeNull();
-    expect(control('project-library').hidden).toBe(false); expect(control('tool-sidebar').hidden).toBe(false);
+    expect(control('project-library').hidden).toBe(true); expect(control('tool-sidebar').hidden).toBe(true);
     expect(errors).toEqual([]);
   });
   it('removes only the unused toolbar mode and keeps selection tools, component add buttons and Shift selection', async () => {
@@ -335,7 +384,7 @@ describe('independent project library and existing right tools', () => {
     const original = serializeProject(current.store.getState().project.document);
     await click(byId('simulation-start'));
     await openProjects();
-    await click(`${byId(`example-${example.id}`)} button`);
+    await click(`${byId(`example-${example.id}`)} a`);
     const loaded = current.store.getState().project.document;
     expect(loaded.id).not.toBe(parseProject(original).id);
     expect(loaded.programs).toHaveLength(1);
@@ -353,13 +402,13 @@ describe('independent project library and existing right tools', () => {
     await act(async () => { current.store.dispatch(nameChanged('Unsaved lesson')); });
     const original = current.store.getState().project.document;
     await openProjects();
-    await click(`${byId('example-led-for')} button`);
+    await click(`${byId('example-led-for')} a`);
     expect(container.querySelector('dialog[open]')).not.toBeNull();
     expect(current.store.getState().project.document).toBe(original);
     expect(backups()).toHaveLength(0);
     await click('dialog .secondary-button');
     expect(current.store.getState().project.document).toBe(original);
-    await click(`${byId('example-led-for')} button`);
+    await click(`${byId('example-led-for')} a`);
     await click(byId('confirm-example'));
     expect(current.store.getState().project.document.programs[0]?.source).toContain('for (int i = 0; i < 3; i++)');
     expect(parseProject(localStorage.getItem(backups()[0] ?? '') ?? '').name).toBe('Unsaved lesson');
@@ -371,7 +420,7 @@ describe('independent project library and existing right tools', () => {
     const original = current.store.getState().project.document;
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
     await openProjects();
-    await click(`${byId('example-dht11')} button`);
+    await click(`${byId('example-dht11')} a`);
     expect(current.store.getState().project.document).toBe(original);
     expect(control('simulation-status').getAttribute('data-status')).toBe('running');
     expect(container.textContent).toContain('No se pudo preservar');
