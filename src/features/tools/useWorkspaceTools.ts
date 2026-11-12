@@ -15,6 +15,8 @@ export function useWorkspaceTools() {
   }, [preferences]);
   return {
     ...preferences,
+    setInspectorCollapsed: (inspectorCollapsed: boolean) => setPreferences((previous) =>
+      inspectorCollapsed === previous.inspectorCollapsed ? previous : { ...previous, inspectorCollapsed }),
     setProjectsOpen: (value: boolean | ((previous: boolean) => boolean)) => setPreferences((previous) => {
       const projectsOpen = typeof value === 'boolean' ? value : value(previous.projectsOpen);
       return projectsOpen === previous.projectsOpen ? previous : { ...previous, projectsOpen };

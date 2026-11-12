@@ -32,22 +32,24 @@ describe('contextual inspector placement', () => {
     expect(panel.x + panel.width).toBeLessThanOrEqual(948);
     expect(panel.y + panel.height).toBeLessThanOrEqual(688);
   });
-  it('expands for complex settings without changing circuit coordinates', () => {
+  it('collapses to the measured heading without widening the panel or changing circuit coordinates', () => {
     const normal = placeInspector({ width: 1100, height: 850 }, anchor, false, false);
-    const expanded = placeInspector({ width: 1100, height: 850 }, anchor, true, false);
-    expect(expanded.width).toBeGreaterThan(normal.width);
-    expect(expanded.height).toBeGreaterThan(normal.height);
+    const collapsed = placeInspector({ width: 1100, height: 850 }, anchor, true, false, 52);
+    expect(collapsed.width).toBe(normal.width);
+    expect(collapsed.height).toBe(52);
+    expect(overlapArea(collapsed, anchor.rect)).toBe(0);
     expect(anchor.rect).toEqual({ x: 300, y: 260, width: 40, height: 40 });
   });
   it.each([320, 390, 760])('uses a full-width bottom sheet at %spx with space above for the canvas', (width) => {
     const normal = placeInspector({ width, height: 600 }, anchor, false, true);
-    const expanded = placeInspector({ width, height: 600 }, anchor, true, true);
+    const collapsed = placeInspector({ width, height: 600 }, anchor, true, true, 66);
     expect(normal.x).toBe(8);
     expect(normal.width).toBe(width - 16);
     expect(normal.y + normal.height).toBe(592);
     expect(normal.height).toBeLessThan(300);
-    expect(expanded.height).toBeGreaterThan(normal.height);
-    expect(expanded.y).toBeGreaterThanOrEqual(8);
+    expect(collapsed.height).toBe(66);
+    expect(collapsed.y).toBe(526);
+    expect(collapsed.width).toBe(normal.width);
   });
   it('transforms a rotated component with the same zoom/pan as SVG', () => {
     const component = { ...createComponent('resistor', { x: 100, y: 80 }, 'r'), rotation: 90 };

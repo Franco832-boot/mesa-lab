@@ -330,6 +330,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         componentId={selectedComponent?.id ?? null}
         wireId={selectedWire?.id ?? null}
         stageRef={stageRef}
+        collapsed={tools.inspectorCollapsed}
+        onToggleCollapse={() => tools.setInspectorCollapsed(!tools.inspectorCollapsed)}
         onClose={() => setInspectorOpen(false)}
         onSheetDockChange={setInspectorDockOffset}
       >
@@ -337,6 +339,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           selectedWire ? (
             <WireInspector
               key={selectedWire.id}
+              collapsed={tools.inspectorCollapsed}
               headerActions={headerActions}
               locked={locked}
               wire={selectedWire}
@@ -348,6 +351,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           ) : (
             <Inspector
               key={selectedComponent?.id ?? activeKind}
+              collapsed={tools.inspectorCollapsed}
               headerActions={headerActions}
               locked={locked}
               simulation={simulation}
@@ -569,8 +573,6 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         <main className="workspace-main">
           <div className="editor-toolbar">
             <div className="tool-group">
-              <a className="icon-button" href="/" aria-label={t('routeHome')} title={t('routeHome')}
-                onClick={(event) => { event.preventDefault(); routes.navigate('/'); }}><Icon name="folder" /></a>
               <button
                 className={`icon-button ${projectsOpen ? 'active-subtle' : ''}`}
                 ref={libraryToggleRef}

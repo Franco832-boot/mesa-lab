@@ -35,6 +35,15 @@ for (const locale of ['es', 'en']) for (const width of [1440, 390]) {
     const left = page.getByTestId('project-library');
     const stage = page.getByTestId('workspace-stage');
     assert.equal(await toggle.getAttribute('aria-label'), locale === 'es' ? 'Mostrar/Ocultar proyectos' : 'Show/Hide projects');
+    assert.equal(await toggle.getAttribute('title'), await toggle.getAttribute('aria-label'));
+    assert.equal(await page.locator('.editor-toolbar path[d="M3 5h7l2 3h9v12H3Z"]').count(), 1, 'Only one Projects folder remains');
+    const folderBox = await toggle.boundingBox(), selectBox = await page.getByRole('button', { name: locale === 'es' ? 'Seleccionar (V)' : 'Select (V)', exact: true }).boundingBox();
+    assert.ok(folderBox && selectBox);
+    assert.ok(Math.abs(folderBox.y + folderBox.height / 2 - selectBox.y - selectBox.height / 2) < 1, 'Folder aligns with the editor controls');
+    assert.equal(await toggle.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    }), true, 'Projects is reachable by pointer/touch');
     const viewport = await page.locator('.workspace-svg > g').getAttribute('transform');
     const stageNode = await stage.elementHandle();
     assert.equal(await left.isVisible(), true, 'Projects opens for a new visitor');

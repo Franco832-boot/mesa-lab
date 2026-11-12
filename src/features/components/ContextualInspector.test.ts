@@ -39,15 +39,16 @@ describe('contextual settings surfaces', () => {
     expect(store.getState()).toBe(before);
   });
   it.each([
-    { locale: 'en', title: 'Selected circuit settings', expand: 'Expand inspector' },
-    { locale: 'es', title: 'Ajustes del circuito seleccionado', expand: 'Ampliar inspector' },
-  ])('retains editable controls and accessible expand/close actions in $locale', ({ locale, title, expand }) => {
+    { locale: 'en', title: 'Selected circuit settings', collapse: 'Collapse inspector' },
+    { locale: 'es', title: 'Ajustes del circuito seleccionado', collapse: 'Plegar inspector' },
+  ])('retains editable controls and accessible collapse/close actions in $locale', ({ locale, title, collapse }) => {
     setLocale(locale);
     const component = createComponent('resistor', { x: 200, y: 220 }, 'r');
     const markup = renderToStaticMarkup(createElement(LocaleProvider, { children:
       createElement(ContextualInspector, {
         components: [component], wires: [], viewport: { zoom: 1, offset: { x: 0, y: 0 } },
         componentId: 'r', wireId: null, stageRef: { current: null }, onClose: noop, onSheetDockChange: noop,
+        collapsed: false, onToggleCollapse: noop,
         children: (headerActions, close) => createElement(Inspector, {
           component, kind: 'resistor', simulation, locked: false, selectedCount: 1,
           headerActions, onClose: close, onUpdate: noop,
@@ -57,7 +58,9 @@ describe('contextual settings surfaces', () => {
     }));
     expect(markup).toContain(`aria-label="${title}"`);
     expect(markup).toContain('class="inspector-overlay"');
-    expect(markup).toContain(`aria-label="${expand}"`);
+    expect(markup).toContain(`aria-label="${collapse}"`);
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('d="m6 9 6 6 6-6"');
     expect(markup).toContain('aria-controls="context-inspector-body"');
     expect(markup).toContain('data-testid="inspector-close"');
     expect(markup).toContain('type="number"');

@@ -10,7 +10,7 @@ describe('workspace preferences and resize bounds', () => {
     const saved = { ...defaultWorkspacePreferences(), tab: 'iot', open: false,
       widths: { components: 280, code: 550, iot: 440 }, snapshot: { voltage: 5 } };
     expect(decodeWorkspacePreferences(JSON.stringify(saved))).toEqual({
-      open: false, projectsOpen: true, tab: 'code', widths: { components: 280, code: 550 },
+      open: false, projectsOpen: true, inspectorCollapsed: false, tab: 'code', widths: { components: 280, code: 550 },
     });
   });
   it('extends legacy UI preferences and respects an explicitly closed Projects library', () => {
@@ -26,6 +26,13 @@ describe('workspace preferences and resize bounds', () => {
     expect(available - bounds.max).toBeGreaterThanOrEqual(360);
     expect(bounds.max).toBeLessThan(available / 2);
     expect(clampSidebarWidth(0, available)).toBe(bounds.min);
+  });
+  it('defaults to an expanded Inspector for legacy preferences and restores only boolean collapse values', () => {
+    expect(decodeWorkspacePreferences(null).inspectorCollapsed).toBe(false);
+    expect(decodeWorkspacePreferences('{"projectsOpen":false}').inspectorCollapsed).toBe(false);
+    expect(decodeWorkspacePreferences('{"inspectorCollapsed":true}').inspectorCollapsed).toBe(true);
+    expect(decodeWorkspacePreferences('{"inspectorCollapsed":false}').inspectorCollapsed).toBe(false);
+    expect(decodeWorkspacePreferences('{"inspectorCollapsed":"true"}').inspectorCollapsed).toBe(false);
   });
   it('rejects invalid data and bounds imported widths', () => {
     expect(decodeWorkspacePreferences('{')).toEqual(defaultWorkspacePreferences());

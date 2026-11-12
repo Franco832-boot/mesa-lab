@@ -955,6 +955,7 @@ button {
   flex: 1;
   min-height: 0;
 }
+.inspector-scroll[hidden] { display: none; }
 .inspector-preview {
   position: relative;
   margin: 17px 18px 0;
@@ -2426,7 +2427,7 @@ fieldset.terminal-picker {
   overscroll-behavior: contain;
 }
 .inspector-content { display: flow-root; }
-.floating-inspector .panel-heading { min-height: 48px; padding: 10px 14px 8px; }
+.floating-inspector .panel-heading { min-height: 48px; padding: 10px 14px 8px; flex-shrink: 0; align-items: center; }
 .floating-inspector .inspector-title { margin: 8px 14px; }
 .floating-inspector .inspector-title p { margin-top: 4px; }
 .floating-inspector .property-list { padding: 4px 14px; }
@@ -2435,12 +2436,7 @@ fieldset.terminal-picker {
 .floating-inspector .inspector-tabs { margin: 8px 14px 0; }
 .floating-inspector .editable-properties { margin: 8px 14px; }
 .inspector-more { display: flex; justify-content: space-between; align-items: center; width: calc(100% - 28px); margin: 8px 14px; padding: 7px 0; }
-.floating-inspector:not(.is-expanded) .inspector-preview {
-  display: none;
-}
-.floating-inspector:not(.is-expanded) .inspector-title p:nth-of-type(n + 2) {
-  display: none;
-}
+.floating-inspector.is-collapsed .panel-heading { border-bottom: 0; }
 .floating-inspector .inspector-title {
   margin: 12px 18px;
 }

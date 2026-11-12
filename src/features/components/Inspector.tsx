@@ -14,6 +14,7 @@ import type { SimulationController } from '../simulation/useSimulation';
 import { ownInput, pinKey } from '../../sim/topology';
 
 interface InspectorProps {
+  collapsed?: boolean;
   headerActions?: ReactNode;
   simulation: SimulationController;
   locked: boolean;
@@ -28,6 +29,7 @@ interface InspectorProps {
   onStartConnection: (reference: PinReference) => void;
 }
 export function Inspector({
+  collapsed = false,
   headerActions,
   simulation,
   locked,
@@ -74,7 +76,7 @@ export function Inspector({
         </button>
         </div>
       </div>
-      <div id="context-inspector-body" className="inspector-scroll">
+      <div id="context-inspector-body" className="inspector-scroll" hidden={collapsed}>
         <div data-inspector-content className="inspector-content">
         <div className="inspector-preview">
           <div className="preview-tag">{t('componentModel')}</div>

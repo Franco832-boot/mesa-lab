@@ -8,6 +8,7 @@ import { Icon } from '../../shared/Icon';
 import { NumberProperty } from './PropertyFields';
 
 export function WireInspector({
+  collapsed = false,
   headerActions,
   locked,
   wire,
@@ -16,6 +17,7 @@ export function WireInspector({
   onClose,
   onRemove,
 }: {
+  collapsed?: boolean;
   headerActions?: ReactNode;
   locked: boolean;
   wire: Wire;
@@ -52,7 +54,7 @@ export function WireInspector({
         </button>
         </div>
       </div>
-      <div id="context-inspector-body" className="inspector-scroll wire-inspector">
+      <div id="context-inspector-body" className="inspector-scroll wire-inspector" hidden={collapsed}>
         <div data-inspector-content className="inspector-content">
         <div className="wire-terminals">
           <code>
@@ -131,11 +133,11 @@ export function WireInspector({
           {t('remove')}
         </button>
         </fieldset>
+        <div className="info-callout">
+          <Icon name="info" />
+          <p>{t(locked ? 'simulationLocked' : 'electricalScopeDetail')}</p>
         </div>
-      </div>
-      <div className="info-callout">
-        <Icon name="info" />
-        <p>{t(locked ? 'simulationLocked' : 'electricalScopeDetail')}</p>
+        </div>
       </div>
     </aside>
   );
