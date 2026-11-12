@@ -23,7 +23,9 @@ import { preserveBeforeExample } from '../features/examples/replacement';
 import { examplePaths, localProjectPath } from './projectRoutes';
 import { useProjectRoutes } from './useProjectRoutes';
 import { useProjectCopies } from '../features/examples/useProjectCopies';
-import { useWorkspaceTools } from '../features/tools/useWorkspaceTools';
+import { useWorkspacePanels } from '../features/tools/useWorkspacePanels';
+import { MobileWorkspaceNav } from '../features/tools/MobileWorkspaceNav';
+import { useVisualViewport } from '../shared/useVisualViewport';
 import { useBoardContext } from '../features/tools/useBoardContext';
 import { CodeWorkspace } from '../features/tools/CodeWorkspace';
 import { simulationPreview } from '../features/tools/simulationPreview';
@@ -53,7 +55,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     load,
     reset,
   } = useProject();
-  const tools = useWorkspaceTools();
+  const tools = useWorkspacePanels();
+  useVisualViewport();
   const libraryOpen = tools.open;
   const setLibraryOpen = tools.setOpen;
   const { projectsOpen, setProjectsOpen } = tools;
@@ -105,7 +108,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     project.components,
     selectedComponent?.id,
   );
-  const inspectorVisible = inspectorOpen && Boolean(selectedComponent || selectedWire);
+  const inspectorVisible = (tools.compact ? tools.mobilePanel === 'inspector' : inspectorOpen)
+    && Boolean(selectedComponent || selectedWire);
   const selectionKey = selectedWire
     ? `wire:${selectedWire.id}`
     : selectedComponent
@@ -113,17 +117,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       : null;
   useEffect(() => {
     setInspectorOpen(selectionKey !== null);
-    if (selectionKey && window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
+    if (!selectionKey) tools.setMobilePanel((previous) => previous === 'inspector' ? null : previous);
   }, [selectionKey]);
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 760px)');
-    const reconcilePanels = () => {
-      if (media.matches && inspectorVisible) setLibraryOpen(false);
-    };
-    reconcilePanels();
-    media.addEventListener('change', reconcilePanels);
-    return () => media.removeEventListener('change', reconcilePanels);
-  }, [inspectorVisible]);
   const activeKind = selectedComponent?.kind ?? inspectedKind;
   const inspectedComponent =
     selectedComponent?.kind === 'potentiometer' &&
@@ -177,7 +172,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
       setMenuOpen(false);
       setInspectorOpen(false);
-      if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
+      if (window.matchMedia('(max-width: 768px)').matches) tools.setMobilePanel(null);
     };
     document.addEventListener('pointerdown', handler);
     document.addEventListener('keydown', escape);
@@ -191,10 +186,13 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   };
   const closeProjects = () => {
     setProjectsOpen(false);
-    requestAnimationFrame(() => libraryToggleRef.current?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => (tools.compact
+      ? document.querySelector<HTMLButtonElement>('[data-testid="mobile-panel-projects"]')
+      : libraryToggleRef.current)?.focus({ preventScroll: true }));
   };
   const focusToolsToggle = () => requestAnimationFrame(() =>
-    document.querySelector<HTMLButtonElement>('[data-testid="sidebar-toggle"]')?.focus({ preventScroll: true }));
+    document.querySelector<HTMLButtonElement>(tools.compact
+      ? `[data-testid="mobile-panel-${toolTab}"]` : '[data-testid="sidebar-toggle"]')?.focus({ preventScroll: true }));
   const addAt = (kind: ComponentKind, center: Point, color?: LedColor) => {
     if (locked) return;
     const definition = componentDefinitions[kind];
@@ -209,7 +207,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       setInspectorOpen(true);
       setInspectedKind(kind);
       setTool('select');
-      if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
+      if (tools.compact) tools.setMobilePanel(null);
     }
   };
   const addFromLibrary = (kind: ComponentKind, color?: LedColor) => {
@@ -226,13 +224,11 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     editor.selectComponent(id, additive);
     boardContext.onCanvasSelection(id);
     setInspectorOpen(true);
-    if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
   };
   const selectWire = (id: string) => {
     setHighlightedIds([]);
     editor.selectWire(id);
     setInspectorOpen(true);
-    if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
   };
   const navigateDiagnostic = (ids: readonly string[]) => {
     const related = project.components.filter((item) => ids.includes(item.id));
@@ -241,7 +237,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     related.forEach((item, index) => editor.selectComponent(item.id, index > 0));
     setHighlightedIds(related.map((item) => item.id));
     setInspectorOpen(true);
-    if (window.matchMedia('(max-width: 760px)').matches) setLibraryOpen(false);
+    if (tools.compact) tools.setMobilePanel('inspector');
     const stage = stageRef.current;
     if (!stage) return;
     const bounds = related.map((item) => componentScreenBounds(item, project.viewport));
@@ -299,6 +295,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     setFitOnMount(fit);
     editor.clearSelection();
     setInspectorOpen(false);
+    if (tools.compact) tools.setMobilePanel(null);
     setConnectionRequest(null);
     setWiperPreview(null);
     setHighlightedIds([]);
@@ -332,7 +329,10 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         stageRef={stageRef}
         collapsed={tools.inspectorCollapsed}
         onToggleCollapse={() => tools.setInspectorCollapsed(!tools.inspectorCollapsed)}
-        onClose={() => setInspectorOpen(false)}
+        onClose={() => {
+          setInspectorOpen(false);
+          if (tools.compact) tools.setMobilePanel(null);
+        }}
         onSheetDockChange={setInspectorDockOffset}
       >
         {(headerActions, close) =>
@@ -377,7 +377,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       </ContextualInspector>
     ) : null;
   return (
-    <div className="app-shell" data-simulation-status={simulation.status}>
+    <div className="app-shell" data-simulation-status={simulation.status} data-mobile-panel={tools.mobilePanel ?? 'desk'}>
       <header className="app-header">
         <a
           className="brand"
@@ -729,11 +729,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           open={libraryOpen}
           onToggle={toggleLibrary}
           tab={toolTab}
-          onTab={(tab) => {
-            setToolTab(tab);
-            if (tab === 'code' && window.matchMedia('(max-width: 760px)').matches)
-              setLibraryOpen(false);
-          }}
+          onTab={setToolTab}
           width={tools.widths[toolTab]}
           onWidth={tools.setWidth}
           onClose={() => {
@@ -778,10 +774,10 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
                   (program) => program.componentId === boardContext.activeBoard?.id,
                 )}
                 saveStatus={saveStatus}
-                onClose={() => {
+                {...(!tools.compact ? { onClose: () => {
                   setLibraryOpen(false);
                   focusToolsToggle();
-                }}
+                } } : {})}
                 onSelectBoard={boardContext.selectBoard}
                 onFileAction={(action) =>
                   boardContext.activeBoard
@@ -802,6 +798,11 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           }}
         />
       </div>
+      <MobileWorkspaceNav active={tools.mobilePanel} hasSelection={Boolean(selectionKey)}
+        onSelect={(panel) => {
+          if (panel === 'components' || panel === 'code') setToolTab(panel);
+          else tools.setMobilePanel(panel);
+        }} />
       {routes.error && <div className="route-error" role="alert" data-testid="route-error">
         <span>{t(routes.error)}</span><a href="/" onClick={(event) => { event.preventDefault(); routes.navigate('/'); }}>{t('routeHome')}</a>
       </div>}

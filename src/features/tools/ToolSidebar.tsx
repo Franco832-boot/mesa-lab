@@ -15,6 +15,7 @@ export function ToolSidebar({ open, tab, onTab, onClose, onToggle, panels, width
   const tabs = useRef<Partial<Record<ToolTab, HTMLButtonElement>>>({});
   return <WorkspaceSidebar expandSequence={expandSequence} open={open} onClose={onClose} onToggle={onToggle}
     id="workspace-tools" label={t('workspaceTools')} testId="tool-sidebar"
+    mobileTitle={t(toolLabels[tab])}
     resizeLabel={t('resizeTools')} expandLabel={t('expandTools')} toggleLabel={t('toggleTools')}
     width={width} {...(onWidth ? { onWidth } : {})} {...(canvasRef ? { canvasRef } : {})}
     {...(canvasVersion ? { canvasVersion } : {})}

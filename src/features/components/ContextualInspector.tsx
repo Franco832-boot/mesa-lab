@@ -4,6 +4,7 @@ import type { ElectronicComponent, Viewport, Wire } from '../../model/types';
 import { useLocale } from '../../locales/useLocale';
 import { Icon } from '../../shared/Icon';
 import { inspectorAnchor, placeInspector } from './inspectorPlacement';
+import { useCompactLayout } from '../../shared/useCompactLayout';
 
 interface ContextualInspectorProps {
   components: readonly ElectronicComponent[];
@@ -27,26 +28,22 @@ export function ContextualInspector({
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
   const [naturalHeight, setNaturalHeight] = useState<number>();
   const [headingHeight, setHeadingHeight] = useState(64);
-  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches);
+  const mobile = useCompactLayout();
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    const media = window.matchMedia('(max-width: 760px)');
     const measure = () => {
       const bounds = stage.getBoundingClientRect();
       setCanvas((previous) => previous.width === bounds.width && previous.height === bounds.height
         ? previous : { width: bounds.width, height: bounds.height });
-      setMobile(media.matches);
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(stage);
     window.addEventListener('resize', measure);
-    media.addEventListener('change', measure);
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measure);
-      media.removeEventListener('change', measure);
     };
   }, [stageRef]);
   useLayoutEffect(() => {

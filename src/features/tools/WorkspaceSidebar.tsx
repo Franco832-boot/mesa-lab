@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { Icon } from '../../shared/Icon';
 import { clampSidebarWidth, sidebarWidthLimits } from './preferences';
+import { useCompactLayout } from '../../shared/useCompactLayout';
+import { useLocale } from '../../locales/useLocale';
 
 /** Shared panel shell. Tool-specific tabs and project cards stay in their owners. */
 export function WorkspaceSidebar({ open, onClose, onToggle, header, children, width = 300,
   onWidth = () => undefined, canvasRef, canvasVersion, onDockChange, side = 'right', id, label,
-  resizeLabel, expandLabel, toggleLabel, testId, controlPrefix = 'sidebar', expandSequence = 0,
+  resizeLabel, expandLabel, toggleLabel, testId, controlPrefix = 'sidebar', expandSequence = 0, mobileTitle,
 }: {
   open: boolean; onClose: () => void; onToggle?: () => void; header: ReactNode; children: ReactNode;
   expandSequence?: number | undefined;
@@ -15,15 +17,16 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
   canvasVersion?: string;
   id: string; label: string; resizeLabel: string; expandLabel?: string; toggleLabel?: string;
   testId: string; controlPrefix?: string;
+  mobileTitle?: string;
 }) {
+  const { t } = useLocale();
+  const compact = useCompactLayout();
   const panelRef = useRef<HTMLElement>(null);
   const [available, setAvailable] = useState(() => typeof window === 'undefined' ? 1440 : window.innerWidth);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
-  const [maxSheetHeight, setMaxSheetHeight] = useState<number | null>(null);
   const [resizing, setResizing] = useState<number | null>(null);
-  const [bottomInset, setBottomInset] = useState(0);
   const [mobileExpanded, setMobileExpanded] = useState(false);
-  useEffect(() => { if (expandSequence > 0 && window.innerWidth <= 760) setMobileExpanded(true); }, [expandSequence]);
+  useEffect(() => { if (expandSequence > 0 && compact) setMobileExpanded(true); }, [expandSequence, compact]);
   const gesture = useRef<{ pointerId: number; x: number; width: number; current: number } | null>(null);
   useEffect(() => {
     const resize = () => setAvailable(window.innerWidth);
@@ -32,13 +35,9 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
   }, []);
   useEffect(() => {
     const measure = () => {
-      const stage = canvasRef?.current?.getBoundingClientRect(), panel = panelRef.current?.getBoundingClientRect();
       const parent = panelRef.current?.parentElement?.getBoundingClientRect();
       if (side === 'left') setContainerWidth(parent?.width || null);
-      setMaxSheetHeight(stage ? Math.max(44, stage.height - 44) : null);
-      setBottomInset(available <= 760 && stage && parent ? Math.max(0, parent.bottom - stage.bottom) : 0);
-      onDockChange?.(side === 'right' && open && available <= 760 && stage && panel
-        ? Math.max(0, Math.min(stage.height - 44, stage.bottom - panel.top + 12)) : 0);
+      onDockChange?.(0);
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -46,17 +45,13 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
     if (canvasRef?.current) observer?.observe(canvasRef.current);
     if (side === 'left' && panelRef.current?.parentElement) observer?.observe(panelRef.current.parentElement);
     return () => observer?.disconnect();
-  }, [open, available, mobileExpanded, bottomInset, canvasRef, canvasVersion, onDockChange, side]);
+  }, [open, available, canvasRef, canvasVersion, onDockChange, side]);
   const widthBudget = side === 'left' ? (containerWidth ?? available) : available;
   const visibleWidth = resizing ?? clampSidebarWidth(width, widthBudget);
   const limits = sidebarWidthLimits(widthBudget);
-  const sheet = available <= 760 && side === 'right';
-  const sheetLimit = maxSheetHeight === null ? `calc(100% - ${bottomInset + 148}px)`
-    : `min(calc(100% - ${bottomInset + 148}px), ${maxSheetHeight}px)`;
   return (
     <>
-      {onToggle && <div className={`tool-sidebar-rail ${open ? 'is-open' : ''} ${mobileExpanded ? 'is-expanded' : ''}`}
-        style={sheet && open ? { bottom: bottomInset, maxHeight: sheetLimit } : undefined}>
+      {onToggle && <div className={`tool-sidebar-rail ${open ? 'is-open' : ''}`}>
         <button type="button" className="tool-sidebar-toggle" data-testid={`${controlPrefix}-toggle`} data-workspace-tool
           aria-label={toggleLabel ?? label} title={toggleLabel ?? label}
           aria-expanded={open} aria-controls={id} onClick={onToggle}>
@@ -64,8 +59,7 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
         </button>
       </div>}
       <aside ref={panelRef} id={id} className={`tool-sidebar panel tool-sidebar--${side} ${mobileExpanded ? 'is-expanded' : ''}`}
-        style={{ width: visibleWidth, flexBasis: visibleWidth,
-          ...(sheet ? { bottom: bottomInset, maxHeight: sheetLimit } : {}) }} data-testid={testId}
+        style={{ width: visibleWidth, flexBasis: visibleWidth }} data-testid={testId}
         aria-label={label} data-workspace-tool hidden={!open}
         onKeyDownCapture={(event) => {
           if (event.key === 'Escape' && !gesture.current) {
@@ -105,12 +99,17 @@ export function WorkspaceSidebar({ open, onClose, onToggle, header, children, wi
             if (next !== null) { event.preventDefault(); onWidth(clampSidebarWidth(next, widthBudget)); }
           }} />
         <div className="tool-sidebar-heading">
-          {header}
-          {expandLabel && <button className="icon-button" data-testid={`${controlPrefix}-expand`} aria-label={expandLabel} aria-expanded={available <= 760 ? mobileExpanded : visibleWidth >= limits.max - 1}
+          <div className="sidebar-desktop-heading">{header}</div>
+          <h2 className="mobile-panel-title">{mobileTitle ?? label}</h2>
+          {expandLabel && <button className="icon-button" data-testid={`${controlPrefix}-expand`}
+            title={compact && mobileExpanded ? t('minimizePanel') : expandLabel}
+            aria-label={compact && mobileExpanded ? t('minimizePanel') : expandLabel} aria-expanded={compact ? mobileExpanded : visibleWidth >= limits.max - 1}
             onClick={() => {
-              if (available <= 760) setMobileExpanded((previous) => !previous);
+              if (compact) setMobileExpanded((previous) => !previous);
               else onWidth(visibleWidth >= limits.max - 1 ? Math.min(300, limits.max) : limits.max);
-            }}><Icon name="plus" size={15} /></button>}
+            }}><Icon name={compact && mobileExpanded ? 'down' : 'fit'} size={18} /></button>}
+          <button className="icon-button mobile-panel-close" type="button" data-testid={`${controlPrefix}-close`}
+            aria-label={t('close')} title={t('close')} onClick={onClose}><Icon name="close" size={18} /></button>
         </div>
         {children}
       </aside>
