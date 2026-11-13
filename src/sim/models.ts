@@ -36,6 +36,22 @@ export function buildModels(
       branches.push({ id: `${component.id}:${kind}`, componentId: component.id, kind, a: node(a), b: node(b), value });
     };
     switch (component.kind) {
+      case 'dc-motor': add('resistor', 'positive', 'negative', component.properties.resistance); break;
+      case 'battery-9v': {
+        const resistance = component.properties.internalResistance ?? 0;
+        if (resistance === 0) add('source', 'positive', 'negative', component.properties.voltage);
+        else {
+          const internal = pinKey(component.id, '@battery:internal');
+          branches.push({ id: `${component.id}:source`, componentId: component.id, kind: 'source', a: internal, b: node('negative'), value: component.properties.voltage },
+            { id: `${component.id}:internal-resistance`, componentId: component.id, kind: 'resistor', a: internal, b: node('positive'), value: resistance });
+        }
+        break;
+      }
+      case 'l293d':
+        // Illustrative standby loads; not a transistor/quiescent-current model.
+        add('resistor', 'VCC1', 'GND', 5000);
+        branches.push({ id: `${component.id}:motor-standby`, componentId: component.id, kind: 'resistor', a: node('VCC2'), b: node('GND'), value: 100000 });
+        break;
       case 'pcf8574': {
         add('resistor', 'VCC', 'GND', 50000);
         for (const terminal of ['SDA', 'SCL']) branches.push({ id: `${component.id}:pullup:${terminal}`, componentId: component.id, kind: 'resistor', a: node('VCC'), b: node(terminal), value: 4700 });

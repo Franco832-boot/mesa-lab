@@ -1,4 +1,5 @@
 import { LCD_TERMINALS } from './lcd';
+import { L293D_PINS } from './l293d';
 import type {
   ComponentKind,
   ElectronicComponent,
@@ -216,6 +217,13 @@ const sourceDefinitions: Record<
   ComponentKind,
   { pins: PinDefinition[]; contactGroups: ContactGroup[] }
 > = {
+  'dc-motor': { pins: [pin('positive', 5, 30, 'passive', 'M+'), pin('negative', 19, 30, 'passive', 'M−')], contactGroups: [] },
+  'battery-9v': { pins: [pin('positive', 7, -2, 'power', '+'), pin('negative', 19.5, -2, 'ground', '−')], contactGroups: [] },
+  l293d: { pins: L293D_PINS.map((id, index) => pin(id,
+    1.01 + (index < 8 ? index : 15 - index) * 2.54,
+    index < 8 ? 6.985 : -0.635,
+    id.startsWith('GND') ? 'ground' : id.startsWith('VCC') ? 'power' : 'digital', `${index + 1} · ${id}`)),
+    contactGroups: [{ id: 'ground', pinIds: ['GND', 'GND-2', 'GND-3', 'GND-4'] }] },
   pcf8574: { pins: [...['GND','VCC','SDA','SCL'].map((id, index) => pin(id, -5, 7 + index * 2.54, id === 'GND' ? 'ground' : id === 'VCC' ? 'power' : 'digital')),
     ...LCD_TERMINALS.map((id, index) => pin(`LCD_${id}`, 1.95 + index * 2.54, 2, 'digital', `LCD · ${id}`))], contactGroups: [{ id: 'vcc', pinIds: ['VCC', 'LCD_VDD'] }, { id: 'ground', pinIds: ['GND', 'LCD_VSS', 'LCD_K'] }] },
   'lcd-20x4': { pins: lcdHeaderPins, contactGroups: [] },
@@ -313,6 +321,9 @@ function defineComponent(kind: ComponentKind): ComponentDefinition {
   };
 }
 export const componentDefinitions: Record<ComponentKind, ComponentDefinition> = {
+  'dc-motor': defineComponent('dc-motor'),
+  'battery-9v': defineComponent('battery-9v'),
+  l293d: defineComponent('l293d'),
   pcf8574: defineComponent('pcf8574'),
   'lcd-20x4': defineComponent('lcd-20x4'),
   'lcd-16x2': defineComponent('lcd-16x2'),
@@ -381,6 +392,9 @@ export function createComponent(
 ): ElectronicComponent {
   const base = { id, position, rotation: 0 };
   switch (kind) {
+    case 'dc-motor': return { ...base, kind, properties: { resistance: 100, nominalVoltage: 9, maxCurrent: 0.3 } };
+    case 'battery-9v': return { ...base, kind, properties: { voltage: 9, internalResistance: 2, maxCurrent: 0.5 } };
+    case 'l293d': return { ...base, kind, properties: { model: 'L293D' } };
     case 'pcf8574': return { ...base, kind, properties: { address: 0x27, contrast: 0.9 } };
     case 'lcd-20x4': case 'lcd-16x2': return { ...base, kind, properties: { controller: 'HD44780' } };
     case 'dht11': return { ...base, kind, properties: { temperature: 25, humidity: 50 } };

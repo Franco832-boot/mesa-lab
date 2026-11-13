@@ -74,6 +74,25 @@ export function PropertyFields({
 }) {
   const { t } = useLocale();
   switch (component.kind) {
+    case 'dc-motor': return <>
+      <NumberProperty label="motorResistance" value={component.properties.resistance} min={.01} max={1e6}
+        onCommit={(resistance) => onUpdate({ kind: 'dc-motor', properties: { ...component.properties, resistance } })} />
+      <NumberProperty label="motorNominalVoltage" value={component.properties.nominalVoltage} min={.01} max={60}
+        onCommit={(nominalVoltage) => onUpdate({ kind: 'dc-motor', properties: { ...component.properties, nominalVoltage } })} />
+      <NumberProperty label="currentLimit" value={component.properties.maxCurrent} min={.001} max={100}
+        onCommit={(maxCurrent) => onUpdate({ kind: 'dc-motor', properties: { ...component.properties, maxCurrent } })} />
+      <p className="inspector-hint">{t('motorModelNote')}</p>
+    </>;
+    case 'l293d': return <p className="inspector-hint">{t('driverModelNote')}</p>;
+    case 'battery-9v': return <>
+      <NumberProperty label="supplyVoltage" value={component.properties.voltage} min={0} max={60}
+        onCommit={(voltage) => onUpdate({ kind: 'battery-9v', properties: { ...component.properties, voltage } })} />
+      <NumberProperty label="internalResistance" value={component.properties.internalResistance ?? 0} min={0} max={1e6}
+        onCommit={(internalResistance) => onUpdate({ kind: 'battery-9v', properties: { ...component.properties, internalResistance } })} />
+      <NumberProperty label="currentLimit" value={component.properties.maxCurrent} min={.001} max={100}
+        onCommit={(maxCurrent) => onUpdate({ kind: 'battery-9v', properties: { ...component.properties, maxCurrent } })} />
+      <p className="inspector-hint">{t('batteryModelNote')}</p>
+    </>;
     case 'lcd-16x2': case 'lcd-20x4': return <>
       <p>{t('lcdType')}: HD44780</p>
       <p>{t('lcdCharacters')}: {lcdGeometry(component.kind).columns} × {lcdGeometry(component.kind).rows}</p>

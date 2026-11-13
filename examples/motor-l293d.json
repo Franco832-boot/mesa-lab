@@ -1,0 +1,379 @@
+{
+  "format": "mesa-circuit",
+  "version": 1,
+  "id": "motor-dc-l293d",
+  "name": "Control de motor DC con L293D y millis()",
+  "components": [
+    {
+      "id": "uno",
+      "position": {
+        "x": 50,
+        "y": 40
+      },
+      "rotation": 0,
+      "kind": "arduino-uno",
+      "properties": {
+        "logicVoltage": 5
+      }
+    },
+    {
+      "id": "breadboard",
+      "position": {
+        "x": 50,
+        "y": 365
+      },
+      "rotation": 0,
+      "kind": "breadboard",
+      "properties": {
+        "columns": 63
+      }
+    },
+    {
+      "id": "motor",
+      "position": {
+        "x": 440,
+        "y": 100
+      },
+      "rotation": 0,
+      "kind": "dc-motor",
+      "properties": {
+        "resistance": 100,
+        "nominalVoltage": 9,
+        "maxCurrent": 0.3
+      }
+    },
+    {
+      "id": "battery",
+      "position": {
+        "x": 620,
+        "y": 80
+      },
+      "rotation": 0,
+      "kind": "battery-9v",
+      "properties": {
+        "voltage": 9,
+        "maxCurrent": 0.5,
+        "internalResistance": 2
+      }
+    },
+    {
+      "id": "bridge",
+      "position": {
+        "x": 305.03999999999996,
+        "y": 454.83472
+      },
+      "rotation": 0,
+      "attachments": [
+        {
+          "pinId": "EN1,2",
+          "breadboardId": "breadboard",
+          "holeId": "f25"
+        },
+        {
+          "pinId": "IN1",
+          "breadboardId": "breadboard",
+          "holeId": "f26"
+        },
+        {
+          "pinId": "OUT1",
+          "breadboardId": "breadboard",
+          "holeId": "f27"
+        },
+        {
+          "pinId": "GND",
+          "breadboardId": "breadboard",
+          "holeId": "f28"
+        },
+        {
+          "pinId": "GND-2",
+          "breadboardId": "breadboard",
+          "holeId": "f29"
+        },
+        {
+          "pinId": "OUT2",
+          "breadboardId": "breadboard",
+          "holeId": "f30"
+        },
+        {
+          "pinId": "IN2",
+          "breadboardId": "breadboard",
+          "holeId": "f31"
+        },
+        {
+          "pinId": "VCC2",
+          "breadboardId": "breadboard",
+          "holeId": "f32"
+        },
+        {
+          "pinId": "EN3,4",
+          "breadboardId": "breadboard",
+          "holeId": "e32"
+        },
+        {
+          "pinId": "IN3",
+          "breadboardId": "breadboard",
+          "holeId": "e31"
+        },
+        {
+          "pinId": "OUT3",
+          "breadboardId": "breadboard",
+          "holeId": "e30"
+        },
+        {
+          "pinId": "GND-3",
+          "breadboardId": "breadboard",
+          "holeId": "e29"
+        },
+        {
+          "pinId": "GND-4",
+          "breadboardId": "breadboard",
+          "holeId": "e28"
+        },
+        {
+          "pinId": "OUT4",
+          "breadboardId": "breadboard",
+          "holeId": "e27"
+        },
+        {
+          "pinId": "IN4",
+          "breadboardId": "breadboard",
+          "holeId": "e26"
+        },
+        {
+          "pinId": "VCC1",
+          "breadboardId": "breadboard",
+          "holeId": "e25"
+        }
+      ],
+      "kind": "l293d",
+      "properties": {
+        "model": "L293D"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "logic-power",
+      "from": {
+        "componentId": "uno",
+        "pinId": "5V"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "a25"
+      },
+      "color": "#bd665c",
+      "waypoints": []
+    },
+    {
+      "id": "logic-ground",
+      "from": {
+        "componentId": "uno",
+        "pinId": "GND"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn1"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "motor-power",
+      "from": {
+        "componentId": "battery",
+        "pinId": "positive"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "j32"
+      },
+      "color": "#bd665c",
+      "waypoints": []
+    },
+    {
+      "id": "motor-ground",
+      "from": {
+        "componentId": "battery",
+        "pinId": "negative"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn40"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "dip-ground-0",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "j28"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn20"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "dip-ground-1",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "j29"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn21"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "dip-ground-2",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "a28"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn22"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "dip-ground-3",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "a29"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn23"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "enable",
+      "from": {
+        "componentId": "uno",
+        "pinId": "D8"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "j25"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "in1",
+      "from": {
+        "componentId": "uno",
+        "pinId": "D9"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "j26"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "in2",
+      "from": {
+        "componentId": "uno",
+        "pinId": "D10"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "j31"
+      },
+      "color": "#668c75",
+      "waypoints": []
+    },
+    {
+      "id": "out1",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "j27"
+      },
+      "to": {
+        "componentId": "motor",
+        "pinId": "positive"
+      },
+      "color": "#c69242",
+      "waypoints": []
+    },
+    {
+      "id": "out2",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "j30"
+      },
+      "to": {
+        "componentId": "motor",
+        "pinId": "negative"
+      },
+      "color": "#7d85a7",
+      "waypoints": []
+    },
+    {
+      "id": "unused-enable",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "a32"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn30"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "unused-in3",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "a31"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn31"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    },
+    {
+      "id": "unused-in4",
+      "from": {
+        "componentId": "breadboard",
+        "pinId": "a26"
+      },
+      "to": {
+        "componentId": "breadboard",
+        "pinId": "bn32"
+      },
+      "color": "#525b69",
+      "waypoints": []
+    }
+  ],
+  "programs": [
+    {
+      "componentId": "uno",
+      "language": "arduino-cpp",
+      "source": "// UNO: D8 -> EN1,2; D9 -> IN1; D10 -> IN2.\n// UNO 5V -> VCC1. Battery +9V -> VCC2. All GNDs share the return.\n// OUT1/OUT2 -> motor. Never connect the battery to the UNO 5V pin.\n// 3 seconds forward, 1 second brake, 3 seconds reverse, then repeat.\nconst int enablePin = 8;\nconst int input1 = 9;\nconst int input2 = 10;\nunsigned long previousMillis = 0;\nint phase = 0;\n\nvoid setup() {\n  pinMode(enablePin, OUTPUT);\n  pinMode(input1, OUTPUT);\n  pinMode(input2, OUTPUT);\n  digitalWrite(input1, HIGH);\n  digitalWrite(input2, LOW);\n  digitalWrite(enablePin, HIGH);\n}\n\nvoid loop() {\n  unsigned long now = millis();\n  unsigned long elapsed = now - previousMillis;\n  if (phase == 0 && elapsed >= 3000UL) {\n    digitalWrite(input1, LOW);\n    digitalWrite(input2, LOW);\n    phase = 1;\n    previousMillis = now;\n  } else if (phase == 1 && elapsed >= 1000UL) {\n    digitalWrite(input1, LOW);\n    digitalWrite(input2, HIGH);\n    phase = 2;\n    previousMillis = now;\n  } else if (phase == 2 && elapsed >= 3000UL) {\n    digitalWrite(input1, HIGH);\n    digitalWrite(input2, LOW);\n    phase = 0;\n    previousMillis = now;\n  }\n}\n",
+      "execution": "unavailable"
+    }
+  ],
+  "viewport": {
+    "offset": {
+      "x": 0,
+      "y": 0
+    },
+    "zoom": 1
+  }
+}

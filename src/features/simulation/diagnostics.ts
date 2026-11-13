@@ -37,6 +37,12 @@ export function diagnosticRelatedComponents(
 
 /** Qualified guidance describes model evidence, never an invented physical cause or damage event. */
 export const diagnosticGuidance: Record<DiagnosticCode, { why: TranslationKey; action: TranslationKey }> = {
+  'driver-supply': { why: 'diagnosticDriverSupply', action: 'driverSupplyAction' },
+  'driver-input': { why: 'diagnosticDriverInput', action: 'driverInputAction' },
+  'driver-overcurrent': { why: 'diagnosticDriverCurrent', action: 'driverCurrentAction' },
+  'motor-overload': { why: 'diagnosticMotorOverload', action: 'motorOverloadAction' },
+  'battery-overcurrent': { why: 'diagnosticBatteryCurrent', action: 'batteryCurrentAction' },
+  'battery-sag': { why: 'diagnosticBatterySag', action: 'batterySagAction' },
   'invalid-reference': { why: 'diagnosticWhyInvalidReference', action: 'diagnosticActionInvalidReference' },
   'invalid-input': { why: 'diagnosticWhyInvalidInput', action: 'diagnosticActionInvalidInput' },
   'disconnected-component': { why: 'diagnosticWhyDisconnected', action: 'diagnosticActionDisconnected' },

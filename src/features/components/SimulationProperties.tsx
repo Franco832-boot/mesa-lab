@@ -8,6 +8,15 @@ import { gpioConfiguration, gpioPins, GPIO_CURRENT_LIMIT_A } from '../../sim/gpi
 import { ownInput, pinKey } from '../../sim/topology';
 import { DHT11_LIMITS } from '../../model/dht11';
 import { NumberProperty } from './PropertyFields';
+import type { TranslationKey } from '../../locales/es/messages';
+import type { BridgeChannelState, ComponentResult } from '../../sim/types';
+
+const motorDirectionMessages: Record<NonNullable<ComponentResult['motor']>['direction'], TranslationKey> = {
+  forward: 'motorForward', reverse: 'motorReverse', stopped: 'motorStopped', unresolved: 'motorUnresolved',
+};
+const bridgeMessages: Record<BridgeChannelState, TranslationKey> = {
+  forward: 'motorForward', reverse: 'motorReverse', brake: 'bridgeBrake', disabled: 'bridgeDisabled', invalid: 'bridgeInvalid',
+};
 
 /** Formats engine outputs and forwards controls; performs no electrical evaluation. */
 export function SimulationProperties({
@@ -29,6 +38,15 @@ export function SimulationProperties({
   const wiperRatio = component.kind === 'potentiometer' ? ownInput(simulation.inputs.potentiometers, component.id) ?? component.properties.ratio : undefined;
   const segments = component.kind === 'potentiometer' && wiperRatio !== undefined ? potentiometerResistances(component.properties.resistance, wiperRatio) : undefined;
   const board = component.kind === 'arduino-uno' || component.kind === 'esp8266';
+  const terminalValues = <>
+    <dl className="electrical-values terminal-values">
+      {componentDefinitions[component.kind].pins.map((pin) => <div key={pin.id}>
+        <dt>{pin.label} · {t('pinVoltage')}</dt>
+        <dd>{value(simulation.snapshot?.pins[pinKey(component.id, pin.id)]?.voltage, 'V')}</dd>
+      </div>)}
+    </dl>
+    <p>{t('pinReferenceNote')}</p>
+  </>;
   return (
     <section className="simulation-properties" aria-label={t('electricalResults')}>
       {!gpioOnly && <>
@@ -50,11 +68,18 @@ export function SimulationProperties({
       {result && (
         <dl className="electrical-values" data-testid="electrical-values">
           <div><dt>{t('status')}</dt><dd>{t(conditionMessages[result.condition])}</dd></div>
+          {result.motor && <>
+            <div><dt>{t('motorDirection')}</dt><dd data-testid="motor-direction">{t(motorDirectionMessages[result.motor.direction])}</dd></div>
+            <div><dt>{t('motorSpeed')}</dt><dd data-testid="motor-speed">{value(result.motor.speed === undefined ? undefined : result.motor.speed * 100, '%')}</dd></div>
+          </>}
+          {result.bridge?.map((state, index) => <div key={index}>
+            <dt>{t(index === 0 ? 'bridgeChannel1' : 'bridgeChannel2')}</dt><dd data-testid={`bridge-channel-${index + 1}`}>{t(bridgeMessages[state])}</dd>
+          </div>)}
           {!board && component.kind !== 'breadboard' && (
             <>
               <div><dt>{t(result.lcd ? 'lcdLogicVoltage' : 'voltageDrop')}</dt><dd>{value(result.voltage, 'V')}</dd></div>
-              <div><dt>{t(result.lcd ? 'lcdLogicCurrent' : 'currentValue')}</dt><dd>{value(result.current, 'A')}</dd></div>
-              <div><dt>{t(result.lcd ? 'lcdLogicPower' : 'powerDissipation')}</dt><dd>{value(result.power, 'W')}</dd></div>
+              {component.kind !== 'l293d' && <div><dt>{t(result.lcd ? 'lcdLogicCurrent' : component.kind === 'dc-motor' ? 'motorEstimatedCurrent' : 'currentValue')}</dt><dd>{value(result.current, 'A')}</dd></div>}
+              <div><dt>{t(result.lcd ? 'lcdLogicPower' : component.kind === 'l293d' ? 'driverLoss' : 'powerDissipation')}</dt><dd>{value(result.power, 'W')}</dd></div>
             </>
           )}
           {component.kind === 'led' && (
@@ -63,17 +88,9 @@ export function SimulationProperties({
         </dl>
       )}
       {simulation.snapshot && !board && component.kind !== 'breadboard' && (
-        <>
-          <dl className="electrical-values terminal-values">
-            {componentDefinitions[component.kind].pins.map((pin) => (
-              <div key={pin.id}>
-                <dt>{pin.id} · {t('pinVoltage')}</dt>
-                <dd>{value(simulation.snapshot?.pins[pinKey(component.id, pin.id)]?.voltage, 'V')}</dd>
-              </div>
-            ))}
-          </dl>
-          <p>{t('pinReferenceNote')}</p>
-        </>
+        component.kind === 'dc-motor' || component.kind === 'l293d' || component.kind === 'battery-9v'
+          ? <details className="terminal-readings"><summary>{t('pins')}</summary>{terminalValues}</details>
+          : terminalValues
       )}
       {component.kind === 'pushbutton' && (
         <>

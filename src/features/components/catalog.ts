@@ -16,6 +16,9 @@ export interface CatalogEntry {
   category: 'boards' | 'basic';
 }
 export const catalog: CatalogEntry[] = [
+  { kind: 'dc-motor', name: 'motorName', description: 'motorDescription', category: 'basic' },
+  { kind: 'l293d', name: 'driverName', description: 'driverDescription', category: 'basic' },
+  { kind: 'battery-9v', name: 'batteryName', description: 'batteryDescription', category: 'basic' },
   { kind: 'pcf8574', name: 'pcfName', description: 'pcfDescription', category: 'basic' },
   { kind: 'lcd-20x4', name: 'lcd20Name', description: 'lcdDescription', category: 'basic' },
   { kind: 'lcd-16x2', name: 'lcd16Name', description: 'lcdDescription', category: 'basic' },

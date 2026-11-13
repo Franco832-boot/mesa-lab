@@ -23,6 +23,12 @@ const breadboardUnitsPerMm = 6.25 / CONTACT_PITCH_MM;
 const ledUnitsPerMm = 46 / 5;
 const resistorUnitsPerMm = 74 / 6.3;
 export const physicalSpecs: Record<ComponentKind, PhysicalSpec> = {
+  'dc-motor': { model: 'Illustrative brushed DC motor · Ø24 mm', widthMm: 24, heightMm: 30,
+    sourceBody: { x: 0, y: 0, width: 24, height: 30 }, sourceViewBox: { x: -2, y: -6, width: 28, height: 39 } },
+  l293d: { model: 'L293DNE · PDIP-16 · 2.54 mm pitch', widthMm: 19.8, heightMm: 6.35,
+    sourceBody: { x: 0, y: 0, width: 19.8, height: 6.35 }, sourceViewBox: { x: -1, y: -2, width: 21.8, height: 10.35 } },
+  'battery-9v': { model: 'PP3 · nominal 9 V', widthMm: 26.5, heightMm: 48.5,
+    sourceBody: { x: 0, y: 0, width: 26.5, height: 48.5 }, sourceViewBox: { x: -1, y: -5, width: 28.5, height: 55 } },
   // Approx. 16 × 27 mm overall, including the 5 mm header tails.
   pcf8574: { model: 'PCF8574 backpack, YWROBOT pin mapping', widthMm: 42, heightMm: 19, sourceBody: { x: 0, y: 0, width: 42, height: 19 }, sourceViewBox: { x: -6, y: -1, width: 49, height: 21 } },
   'lcd-20x4': { model: 'HD44780 2004 module', widthMm: 98, heightMm: 60, sourceBody: { x: 0, y: 0, width: 98, height: 60 }, sourceViewBox: { x: -1, y: -1, width: 100, height: 62 } },

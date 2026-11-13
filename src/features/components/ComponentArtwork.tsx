@@ -1,4 +1,5 @@
 import { LcdArtwork } from './LcdArtwork';
+import { BatteryArtwork, L293dArtwork, MotorArtwork } from './MotorArtwork';
 import { useId } from 'react';
 import type { ElectronicComponent, ComponentKind } from '../../model/types';
 import { artworkTransform, physicalSpecs, visualBounds } from '../../model/physical';
@@ -546,6 +547,9 @@ function BasicArtwork({
   const buttonLegs = componentDefinitions.pushbutton.sourcePins;
   const potLegs = componentDefinitions.potentiometer.sourcePins;
   switch (kind) {
+    case 'dc-motor': return <MotorArtwork {...(result ? { result } : {})} />;
+    case 'l293d': return <L293dArtwork />;
+    case 'battery-9v': return <BatteryArtwork {...(properties ? { properties } : {})} />;
     case 'pcf8574': return <g data-testid="pcf-artwork">
       <rect width="42" height="19" rx=".7" fill="#234d47" stroke="#133c35" strokeWidth=".4" />
       <rect x="16" y="7" width="13" height="6" rx=".3" fill="#202724" />

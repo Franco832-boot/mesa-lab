@@ -26,6 +26,7 @@ export function constantValue(token: string, board: BoardKind, at: SourceSpan): 
 }
 export type BuiltinEffect =
   | { kind: 'wait'; microseconds: number }
+  | { kind: 'pwm'; pinId: string; value: number; periodUs: number | null }
   | { kind: 'mode'; pinId: string; mode: 'input' | 'output' }
   | { kind: 'write'; pinId: string; level: 'HIGH' | 'LOW' };
 
@@ -41,6 +42,12 @@ export function builtinEffect(name: GpioCall, args: readonly Value[], board: Boa
   const pin = gpioPins(board).find((item) => item.gpio === value);
   if (!pin) return fail('invalid-value', at);
   const level = args[1]?.value;
+  if (name === 'analogWrite') {
+    if (board !== 'arduino-uno' || level === undefined || !Number.isInteger(level) || level < 0 || level > 255) return fail('invalid-value', at);
+    // Default UNO timers: phase-correct /64 on 3,9,10,11; fast /64 on 5,6.
+    const periodUs = [5, 6].includes(value) ? 1024 : [3, 9, 10, 11].includes(value) ? 2040 : null;
+    return { kind: 'pwm', pinId: pin.id, value: level, periodUs };
+  }
   if (level !== 0 && level !== 1) return fail('invalid-value', at);
   return name === 'pinMode' ? { kind: 'mode', pinId: pin.id, mode: level === 1 ? 'output' : 'input' }
     : { kind: 'write', pinId: pin.id, level: level === 1 ? 'HIGH' : 'LOW' };

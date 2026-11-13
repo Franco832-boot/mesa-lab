@@ -6,9 +6,12 @@ import type { FirmwareEvent, FirmwareState } from './firmwareRuntime';
 import { evaluateCircuit } from '../../sim/engine';
 import { ownInput, pinKey } from '../../sim/topology';
 import type { ElectricalSnapshot, SimulationInputs } from '../../sim/types';
+import type { GpioChange } from '../../sim/intervals';
 
 export type SimulationStatus = 'stopped' | 'running' | 'paused';
 export interface SimulationState {
+  timeUs: number;
+  pendingGpio: readonly GpioChange[];
   firmware: FirmwareState;
   status: SimulationStatus;
   inputs: SimulationInputs;
@@ -25,6 +28,7 @@ export type SimulationEvent = FirmwareEvent
   | { type: 'http'; request: VirtualHttpRequest };
 
 export const initialSimulation = (): SimulationState => ({
+  timeUs: 0, pendingGpio: [],
   status: 'stopped', inputs: {}, snapshot: null, firmware: {}, virtualNetwork: initialVirtualNetwork(),
 });
 /** Discrete, deterministic lifecycle. No timers or document mutations. */

@@ -5,6 +5,7 @@ import { EXAMPLE_BACKUP_PREFIX, listProjectCopies, readProjectCopy } from '../fe
 
 /** Public URLs identify curated templates only, never user-authored documents. */
 export const examplePaths: Readonly<Record<ExampleId, string>> = {
+  'motor-l293d': '/arduino-motor-dc-l293d',
   'esp-chat-led': '/esp8266-led-telegram',
   'esp-web-led': '/esp8266-led-web',
   dht11: '/arduino-dht11',

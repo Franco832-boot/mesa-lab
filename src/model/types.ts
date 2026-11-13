@@ -18,6 +18,9 @@ export type ComponentKind =
   | 'lcd-16x2'
   | 'lcd-20x4'
   | 'dht11'
+  | 'dc-motor'
+  | 'l293d'
+  | 'battery-9v'
   | 'power-supply';
 export type ElectricalPinType =
   | 'digital'
@@ -35,6 +38,8 @@ export type ElectricalState =
 export interface GpioState {
   mode: 'input' | 'input-pullup' | 'output';
   level: LogicLevel;
+  /** Transient timer output; never part of a saved component or program. */
+  pwm?: { value: number; periodUs: number };
 }
 export interface PinDefinition {
   id: string;
@@ -81,6 +86,9 @@ export type ElectronicComponent = ComponentBase &
     | { kind: 'pcf8574'; properties: { address: number; contrast: number } }
     | { kind: 'lcd-16x2' | 'lcd-20x4'; properties: { controller: 'HD44780' } }
     | { kind: 'dht11'; properties: { temperature: number; humidity: number } }
+    | { kind: 'dc-motor'; properties: { resistance: number; nominalVoltage: number; maxCurrent: number } }
+    | { kind: 'l293d'; properties: { model: 'L293D' } }
+    | { kind: 'battery-9v'; properties: { voltage: number; internalResistance?: number; maxCurrent: number } }
     | { kind: 'power-supply'; properties: { voltage: number } }
   );
 export interface PinReference {

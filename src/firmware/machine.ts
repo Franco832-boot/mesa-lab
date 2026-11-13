@@ -229,7 +229,7 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
         const number = pop(at).value;
         const pin = gpioPins(previous.board).find((item) => item.gpio === number);
         if (!pin) return fail('invalid-value', at);
-        const level = host?.readDigital ? host.readDigital(pin.id, gpio) : modes[pin.id] === 'output' ? levels[pin.id] === 'HIGH' ? 1 : 0 : null;
+        const level = host?.readDigital ? host.readDigital(pin.id, gpio, timeUs) : modes[pin.id] === 'output' ? levels[pin.id] === 'HIGH' ? 1 : 0 : null;
         if (level === null) return fail('indeterminate-read', at);
         operands.push({ type: 'int', value: level }); break;
       }
@@ -372,6 +372,13 @@ export function advanceArduinoMicros(previous: UnoExecution, elapsedUs: number, 
           wakeReason = 'delay';
           if (!Number.isSafeInteger(wakeAtUs)) return fail('invalid-value', at);
           if (phase === 'loop' && effect.microseconds > 0) loopWaited = true;
+        } else if (effect.kind === 'pwm') {
+          modes[effect.pinId] = 'output';
+          const level = effect.value === 0 || (effect.periodUs === null && effect.value < 128) ? 'LOW' : 'HIGH';
+          levels[effect.pinId] = level;
+          gpio.push({ atMs: timeUs / 1000, pinId: effect.pinId, state: { mode: 'output', level,
+            ...(effect.periodUs !== null && effect.value > 0 && effect.value < 255
+              ? { pwm: { value: effect.value, periodUs: effect.periodUs } } : {}) } });
         } else if (effect.kind === 'mode') {
           modes[effect.pinId] = effect.mode;
           if (effect.mode === 'input' && previous.board === 'arduino-uno') levels[effect.pinId] = 'LOW';

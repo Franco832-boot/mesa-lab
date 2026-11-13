@@ -55,7 +55,7 @@ export function ComponentLibrary({
         <div>
           <h2>
             {t('library')}
-            <span className="count-badge">11</span>
+            <span className="count-badge">{catalog.length}</span>
           </h2>
           <p>{t('librarySubtitle')}</p>
         </div>

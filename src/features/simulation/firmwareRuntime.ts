@@ -19,7 +19,9 @@ import {
 } from '../../firmware/uno';
 import type { UnoErrorCode, UnoExecution } from '../../firmware/uno';
 import type { SourceSpan } from '../../firmware/errors';
-import { evaluateCircuit } from '../../sim/engine';
+import { evaluateCircuit, evaluateCircuitAt, evaluateCircuitTimeline } from '../../sim/engine';
+import type { GpioChange } from '../../sim/intervals';
+import { pwmPeriod } from '../../sim/intervals';
 import { ownInput, pinKey } from '../../sim/topology';
 import type { SimulationInputs } from '../../sim/types';
 import type { SimulationState } from './runtime';
@@ -28,7 +30,7 @@ import { observeDht11 } from '../../sim/dht11';
 import type { DhtObservation } from '../../model/dht11';
 
 interface CircuitHost extends FirmwareHost { currentInputs(): SimulationInputs }
-function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, boardId: string, wifiNetwork?: VirtualWifiNetwork): CircuitHost {
+function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, boardId: string, wifiNetwork?: VirtualWifiNetwork, startedAtUs = 0): CircuitHost {
   let inputs = initialInputs;
   let signature: string | null = null, observation: DhtObservation | null = null;
   const targets = new Map<string, string | null>();
@@ -38,8 +40,8 @@ function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, b
     for (const event of pendingGpio) gpio[pinKey(boardId, event.pinId)] = event.state;
     return { ...inputs, gpio };
   };
-  return { ...(wifiNetwork ? { wifiNetwork } : {}), currentInputs: () => inputs, readDigital: (pinId, pendingGpio) => {
-    const reading = evaluateCircuit(project, applyPending(pendingGpio)).pins[pinKey(boardId, pinId)];
+  return { ...(wifiNetwork ? { wifiNetwork } : {}), currentInputs: () => inputs, readDigital: (pinId, pendingGpio, timeUs) => {
+    const reading = evaluateCircuitAt(project, applyPending(pendingGpio), startedAtUs + timeUs).pins[pinKey(boardId, pinId)];
     return reading?.logic === 'HIGH' ? 1 : reading?.logic === 'LOW' ? 0 : null;
   }, observeDht: (pinId, _timeUs, pendingGpio) => {
     const next = `${pinId}:${pendingGpio.length}`;
@@ -64,6 +66,7 @@ function circuitHost(project: CircuitProject, initialInputs: SimulationInputs, b
 
 export interface FirmwareSession { readonly kind: 'firmware-session' }
 export interface BoardExecution {
+  startedAtUs?: number;
   wifiNetwork?: VirtualWifiNetwork;
   session?: FirmwareSession;
   serial?: SerialState;
@@ -166,7 +169,7 @@ export function transitionFirmware(
     if (!board || (board.kind !== 'arduino-uno' && board.kind !== 'esp8266')) return previous;
     const inputs = clearBoardInputs(previous.inputs, project, board.id);
     try {
-      const host = circuitHost(project, inputs, board.id, event.wifiNetwork);
+      const host = circuitHost(project, inputs, board.id, event.wifiNetwork, previous.timeUs);
       const program = project.programs.find((item) => item.componentId === board.id);
       const files = board.kind === 'esp8266' && program?.files
         ? program.files.map((file) => ({ ...file, source: file.name === 'main.ino' ? event.source : file.source }))
@@ -182,7 +185,7 @@ export function transitionFirmware(
         inputs: nextInputs,
         firmware: {
           ...previous.firmware,
-          [board.id]: { ...(event.wifiNetwork ? { wifiNetwork: { ...event.wifiNetwork } } : {}), session: { kind: 'firmware-session' }, files, source: event.source, execution: initial.execution, error: null },
+          [board.id]: { startedAtUs: previous.timeUs, ...(event.wifiNetwork ? { wifiNetwork: { ...event.wifiNetwork } } : {}), session: { kind: 'firmware-session' }, files, source: event.source, execution: initial.execution, error: null },
         },
         snapshot: evaluateCircuit(project, nextInputs),
       };
@@ -202,7 +205,7 @@ export function transitionFirmware(
     return previous;
   const firmware: Record<string, BoardExecution> = { ...previous.firmware };
   let inputs = previous.inputs;
-  const events: { offset: number; id: string; pinId: string; state: GpioState }[] = [];
+  const events: GpioChange[] = [...previous.pendingGpio];
   let changed = false;
   // Bound total interpreter work across all boards, including expression evaluation.
   const active = Object.values(previous.firmware).filter(
@@ -212,15 +215,14 @@ export function transitionFirmware(
   for (const [id, instance] of Object.entries(previous.firmware)) {
     if (!instance.execution || instance.error) continue;
     try {
-      const host = circuitHost(project, inputs, id, instance.wifiNetwork);
+      const host = circuitHost(project, inputs, id, instance.wifiNetwork, instance.startedAtUs ?? 0);
       const advanced = advanceArduino(instance.execution, event.elapsedMs, budget, host);
       inputs = host.currentInputs();
       firmware[id] = { ...instance, execution: advanced.execution };
       for (const output of advanced.gpio)
         events.push({
-          offset: output.atMs - instance.execution.timeMs,
-          id,
-          pinId: output.pinId,
+          atUs: (instance.startedAtUs ?? 0) + output.atMs * 1000,
+          key: pinKey(id, output.pinId),
           state: output.state,
         });
       changed = true;
@@ -231,17 +233,22 @@ export function transitionFirmware(
     }
   }
   if (!changed) return previous;
-  events.sort((a, b) => a.offset - b.offset);
-  if (events.length) {
-    const gpio = { ...inputs.gpio };
-    for (const output of events) gpio[pinKey(output.id, output.pinId)] = output.state;
-    inputs = { ...inputs, gpio };
-  }
+  // A yielded board may lag another board. Keep future writes queued until all
+  // active boards have reached the same electrical horizon.
+  const horizons = Object.values(firmware).flatMap((instance) => instance.execution && !instance.error
+    ? [(instance.startedAtUs ?? 0) + instance.execution.timeUs] : []);
+  const timeUs = Math.max(previous.timeUs, horizons.length ? Math.min(...horizons) : previous.timeUs);
+  const due = events.filter((output) => output.atUs <= timeUs);
+  const timeline = !due.length && inputs === previous.inputs && !pwmPeriod(inputs)
+    ? { inputs, snapshot: previous.snapshot }
+    : evaluateCircuitTimeline(project, inputs, due, previous.timeUs, timeUs);
   return {
     ...previous,
     firmware,
-    inputs,
-    snapshot: inputs !== previous.inputs ? evaluateCircuit(project, inputs) : previous.snapshot,
+    timeUs,
+    pendingGpio: events.filter((output) => output.atUs > timeUs),
+    inputs: timeline.inputs,
+    snapshot: timeline.snapshot,
   };
 }
 
