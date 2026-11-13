@@ -33,9 +33,14 @@ export function validateInputs(project: CircuitProject, inputs: SimulationInputs
   for (const [key, state] of Object.entries(inputs.gpio ?? {})) {
     const pin = gpioKeys.get(key);
     if (!pin || !state || !['input', 'input-pullup', 'output'].includes(state.mode) || !['HIGH', 'LOW', 'FLOATING'].includes(state.level)) { invalid(pin ? [pin.componentId] : [], pin ? [pin.pinId] : []); continue; }
+    if (state.pwm && (components.get(pin.componentId)?.kind !== 'arduino-uno' || state.mode !== 'output' ||
+      ![3, 5, 6, 9, 10, 11].includes(pin.gpio ?? -1) || !Number.isInteger(state.pwm.value) ||
+      state.pwm.value < 1 || state.pwm.value > 254 || state.pwm.periodUs !== ([5, 6].includes(pin.gpio ?? -1) ? 1024 : 2040))) {
+      invalid([pin.componentId], [pin.pinId]); continue;
+    }
     if (components.get(pin.componentId)?.kind === 'esp8266' && pin.gpio === 16 && state.mode === 'input-pullup') { invalid([pin.componentId], [pin.pinId]); continue; }
     const canonical = pinKey(pin.componentId, String(pin.gpio));
-    const signature = `${state.mode}:${state.mode === 'output' ? state.level : 'FLOATING'}`;
+    const signature = `${state.mode}:${state.mode === 'output' ? state.level : 'FLOATING'}:${JSON.stringify(state.pwm)}`;
     const previous = aliases.get(canonical);
     if (previous !== undefined && previous !== signature) invalid([pin.componentId], [pin.pinId]);
     aliases.set(canonical, signature);

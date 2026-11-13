@@ -84,6 +84,13 @@ function id(value: unknown): value is string {
 function validProperties(kind: unknown, value: unknown): boolean {
   if (!record(value)) return false;
   switch (kind) {
+    case 'dc-motor': return finite(value.resistance) && value.resistance >= 0.01 && value.resistance <= 1e6 &&
+      finite(value.nominalVoltage) && value.nominalVoltage > 0 && value.nominalVoltage <= 60 &&
+      finite(value.maxCurrent) && value.maxCurrent > 0 && value.maxCurrent <= 100;
+    case 'battery-9v': return finite(value.voltage) && value.voltage >= 0 && value.voltage <= 60 &&
+      (value.internalResistance === undefined || (finite(value.internalResistance) && value.internalResistance >= 0 && value.internalResistance <= 1e6)) &&
+      finite(value.maxCurrent) && value.maxCurrent > 0 && value.maxCurrent <= 100;
+    case 'l293d': return value.model === 'L293D';
     case 'arduino-uno':
       return value.logicVoltage === 5;
     case 'esp8266':
@@ -124,7 +131,7 @@ function component(value: unknown): value is ElectronicComponent {
     finite(value.rotation) &&
     (value.attachments === undefined ||
       (Array.isArray(value.attachments) &&
-        value.attachments.length <= 4 &&
+        value.attachments.length <= 16 &&
         value.attachments.every(
           (lead: unknown) =>
             record(lead) && id(lead.pinId) && id(lead.breadboardId) && id(lead.holeId),
@@ -152,6 +159,10 @@ function normalizeComponent(item: ElectronicComponent): ElectronicComponent {
       : {}),
   };
   switch (item.kind) {
+    case 'dc-motor': return { ...base, kind: item.kind, properties: { resistance: item.properties.resistance, nominalVoltage: item.properties.nominalVoltage, maxCurrent: item.properties.maxCurrent } };
+    case 'battery-9v': return { ...base, kind: item.kind, properties: { voltage: item.properties.voltage, maxCurrent: item.properties.maxCurrent,
+      ...(item.properties.internalResistance !== undefined ? { internalResistance: item.properties.internalResistance } : {}) } };
+    case 'l293d': return { ...base, kind: item.kind, properties: { model: 'L293D' } };
     case 'pcf8574': return { ...base, kind: item.kind, properties: { address: item.properties.address, contrast: item.properties.contrast } };
     case 'lcd-20x4': case 'lcd-16x2': return { ...base, kind: item.kind, properties: { controller: 'HD44780' } };
     case 'dht11': return { ...base, kind: item.kind, properties: { temperature: item.properties.temperature, humidity: item.properties.humidity } };

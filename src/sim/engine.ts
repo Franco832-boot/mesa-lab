@@ -3,6 +3,8 @@ import { isLcdKind } from '../model/lcd';
 import { lcdView } from './lcdView';
 import type { CircuitProject } from '../model/types';
 import { evaluateDc } from './dc';
+import { L293D_CURRENT_LIMIT, relativeVoltage, solveMotorDrivers } from './motorDrivers';
+import { L293D_CHANNELS } from '../model/l293d';
 import { validateInputs } from './inputs';
 import { evaluateGpio } from './gpio';
 import { ownInput } from './topology';
@@ -10,6 +12,8 @@ import { buildModels } from './models';
 import type { Branch } from './models';
 import { pinKey, resolveTopology } from './topology';
 import type { ComponentResult, ElectricalSnapshot, PinResult, SimulationInputs, SimulationIssue } from './types';
+import { evaluatePwmWindow, evaluateTimeline, pwmPeriod, samplePwm } from './intervals';
+import type { GpioChange } from './intervals';
 
 export const MAX_SIMULATION_PINS = 12000;
 
@@ -35,6 +39,20 @@ function hasReturnPath(branch: Branch, branches: readonly Branch[]): boolean {
 
 /** Pure DC evaluation. No clocks, global state, DOM, Redux, or React. */
 export function evaluateCircuit(project: CircuitProject, inputs: SimulationInputs = {}): ElectricalSnapshot {
+  if (validateInputs(project, inputs).length) return evaluateDcCircuit(project, inputs);
+  const period = pwmPeriod(inputs);
+  return period ? evaluatePwmWindow(project, inputs, 0, period, evaluateDcCircuit) : evaluateDcCircuit(project, inputs);
+}
+
+export function evaluateCircuitAt(project: CircuitProject, inputs: SimulationInputs, timeUs: number): ElectricalSnapshot {
+  return validateInputs(project, inputs).length ? evaluateDcCircuit(project, inputs) : evaluateDcCircuit(project, samplePwm(inputs, timeUs));
+}
+
+export function evaluateCircuitTimeline(project: CircuitProject, inputs: SimulationInputs, changes: readonly GpioChange[], startUs: number, endUs: number) {
+  return evaluateTimeline(project, inputs, changes, startUs, endUs, evaluateDcCircuit, evaluateCircuit);
+}
+
+function evaluateDcCircuit(project: CircuitProject, inputs: SimulationInputs): ElectricalSnapshot {
   // Bound topology allocation as well as the DC matrix. The editor can retain
   // larger documents without allocating hundreds of thousands of runtime pins.
   const pinCount = project.components.reduce((count, component) =>
@@ -56,7 +74,10 @@ export function evaluateCircuit(project: CircuitProject, inputs: SimulationInput
       diagnostics,
     };
   }
-  const dc = evaluateDc(models.branches);
+  const drivers = project.components.some((part) => part.kind === 'l293d') ? solveMotorDrivers(project, topology, models.branches) : undefined;
+  const dc = drivers?.dc ?? evaluateDc(models.branches);
+  const allBranches = drivers?.branches ?? models.branches;
+  diagnostics.push(...(drivers?.diagnostics ?? []));
   diagnostics.push(...dc.diagnostics);
   const gpio = evaluateGpio(project, topology, dc);
   diagnostics.push(...gpio.diagnostics);
@@ -68,12 +89,12 @@ export function evaluateCircuit(project: CircuitProject, inputs: SimulationInput
     pins.push([key, voltage === undefined ? { logic: 'FLOATING' } : { voltage, logic: 'UNDEFINED' }]);
   }
   const components = project.components.map((component): [string, ComponentResult] => {
-    const branches = models.branches.filter((branch) => branch.componentId === component.id);
+    const branches = allBranches.filter((branch) => branch.componentId === component.id);
     const branch = branches[0];
     const state: ComponentResult = { condition: 'normal' };
     if (component.kind === 'led') state.brightness = 0;
     if (component.kind === 'pushbutton' && component.properties.normallyClosed !== (ownInput(inputs.buttons, component.id) ?? false)) state.condition = 'active';
-    if (branch && component.kind !== 'arduino-uno' && component.kind !== 'esp8266' && component.kind !== 'pcf8574' && !isLcdKind(component.kind)) {
+    if (branch && component.kind !== 'arduino-uno' && component.kind !== 'esp8266' && component.kind !== 'pcf8574' && component.kind !== 'l293d' && !isLcdKind(component.kind)) {
       const a = dc.voltages.get(branch.a), b = dc.voltages.get(branch.b);
       if (a !== undefined && b !== undefined && dc.references.get(branch.a) === dc.references.get(branch.b)) state.voltage = a - b;
       const current = dc.currents.get(branch.id);
@@ -91,10 +112,56 @@ export function evaluateCircuit(project: CircuitProject, inputs: SimulationInput
       }
       // A digital sensor validates its supply and bus separately; DATA does
       // not need the conducting series return path expected of passive loads.
-      if (component.kind !== 'dht11' && !hasReturnPath(branch, models.branches)) {
+      if (component.kind !== 'dht11' && !hasReturnPath(branch, allBranches)) {
         const hasExternalWire = componentDefinitions[component.kind].pins.some((pin) => topology.connectedPins.has(pinKey(component.id, pin.id)));
         if (hasExternalWire) diagnostics.push({ code: 'open-circuit', severity: 'warning', componentIds: [component.id], pinIds: [] });
       }
+    }
+    if (component.kind === 'dc-motor') {
+      const voltage = state.voltage;
+      state.motor = voltage === undefined ? { direction: 'unresolved' } : {
+        direction: Math.abs(voltage) < 1e-8 ? 'stopped' : voltage > 0 ? 'forward' : 'reverse',
+        speed: Math.abs(voltage) < 1e-8 ? 0 : Math.min(1, Math.abs(voltage) / component.properties.nominalVoltage),
+      };
+      if (state.motor.direction === 'forward' || state.motor.direction === 'reverse') state.condition = 'active';
+      if ((state.current !== undefined && Math.abs(state.current) > component.properties.maxCurrent + 1e-8) ||
+        (voltage !== undefined && Math.abs(voltage) > component.properties.nominalVoltage + 1e-8))
+        diagnostics.push({ code: 'motor-overload', severity: 'warning', componentIds: [component.id], pinIds: ['positive', 'negative'] });
+    }
+    if (component.kind === 'battery-9v') {
+      const node = (id: string) => topology.nodeByPin.get(pinKey(component.id, id));
+      const voltage = relativeVoltage(dc, node('positive'), node('negative'));
+      if (voltage !== undefined) state.voltage = voltage; else delete state.voltage;
+      // Positive inspector current means delivery out of the positive terminal.
+      const sourceCurrent = dc.currents.get(`${component.id}:source`);
+      if (sourceCurrent !== undefined) state.current = -sourceCurrent;
+      if (state.current !== undefined && state.voltage !== undefined) state.power = Math.abs(state.current * state.voltage);
+      if (node('positive') === node('negative')) diagnostics.push({ code: 'short-circuit', severity: 'error', componentIds: [component.id], pinIds: ['positive', 'negative'] });
+      if (state.current !== undefined && Math.abs(state.current) > component.properties.maxCurrent + 1e-8)
+        diagnostics.push({ code: 'battery-overcurrent', severity: 'warning', componentIds: [component.id], pinIds: ['positive', 'negative'] });
+      if ((voltage !== undefined && voltage < -1e-8) || (state.current !== undefined && state.current < -1e-8))
+        diagnostics.push({ code: 'reverse-polarity', severity: 'warning', componentIds: [component.id], pinIds: ['positive', 'negative'] });
+      if (voltage !== undefined && voltage < component.properties.voltage * 0.9 - 1e-8)
+        diagnostics.push({ code: 'battery-sag', severity: 'warning', componentIds: [component.id], pinIds: ['positive', 'negative'] });
+    }
+    if (component.kind === 'l293d') {
+      state.bridge = drivers?.bridge.get(component.id) ?? ['invalid', 'invalid'];
+      if (state.bridge.some((channel) => channel === 'forward' || channel === 'reverse')) state.condition = 'active';
+      const node = (id: string) => topology.nodeByPin.get(pinKey(component.id, id));
+      const supply = relativeVoltage(dc, node('VCC2'), node('GND'));
+      if (supply !== undefined) state.voltage = supply;
+      for (const channel of L293D_CHANNELS) for (const output of channel.outputs) {
+        const drive = branches.find((segment) => segment.id === `${component.id}:drive:${output}`);
+        const current = drive ? dc.currents.get(drive.id) : undefined;
+        if (current !== undefined && Math.abs(current) > L293D_CURRENT_LIMIT + 1e-8)
+          diagnostics.push({ code: 'driver-overcurrent', severity: 'warning', componentIds: [component.id], pinIds: [output] });
+        if (drive && ((drive.b === node('VCC2') && drive.a === node('GND')) ||
+          (drive.b === node('GND') && drive.a === node('VCC2')) ||
+          (node(channel.outputs[0]) === node(channel.outputs[1]) && state.bridge[L293D_CHANNELS.indexOf(channel)] !== 'brake')))
+          diagnostics.push({ code: 'short-circuit', severity: 'error', componentIds: [component.id], pinIds: [...channel.outputs] });
+      }
+      const outputBranches = branches.filter((segment) => segment.id.startsWith(`${component.id}:drive:`));
+      if (!state.bridge.includes('invalid') && outputBranches.every((segment) => dc.currents.has(segment.id))) state.power = outputBranches.reduce((sum, segment) => sum + (dc.currents.get(segment.id) ?? 0) ** 2 * segment.value, 0);
     }
     if (isLcdKind(component.kind)) {
       const groundNode = topology.nodeByPin.get(pinKey(component.id, 'VSS'));

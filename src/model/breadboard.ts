@@ -6,7 +6,7 @@ import type { ComponentKind, ElectronicComponent, LeadAttachment, PinReference, 
 const EPSILON = 1e-4;
 export const INSERTION_DISTANCE = millimetersToWorld(CONTACT_PITCH_MM) * 0.8;
 export const canInsert = (kind: ComponentKind): boolean =>
-  kind === 'resistor' || kind === 'led' || kind === 'pushbutton' || kind === 'potentiometer' || kind === 'dht11';
+  kind === 'resistor' || kind === 'led' || kind === 'pushbutton' || kind === 'potentiometer' || kind === 'dht11' || kind === 'l293d';
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const holeKey = (board: string, hole: string) => JSON.stringify([board, hole]);
 export interface InsertionPlan {

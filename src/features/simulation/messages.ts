@@ -33,6 +33,12 @@ export const conditionMessages: Record<ComponentCondition, TranslationKey> = {
   damaged: 'conditionDamaged',
 };
 export const diagnosticMessages: Record<DiagnosticCode, TranslationKey> = {
+  'driver-supply': 'diagnosticDriverSupply',
+  'driver-input': 'diagnosticDriverInput',
+  'driver-overcurrent': 'diagnosticDriverCurrent',
+  'motor-overload': 'diagnosticMotorOverload',
+  'battery-overcurrent': 'diagnosticBatteryCurrent',
+  'battery-sag': 'diagnosticBatterySag',
   'invalid-reference': 'diagnosticInvalidReference',
   'invalid-input': 'diagnosticInvalidInput',
   'disconnected-component': 'diagnosticDisconnected',

@@ -2,7 +2,7 @@ import { componentDefinitions, createComponent, pinWorldPosition } from './compo
 import { planInsertion } from './breadboard';
 import type { ElectronicComponent } from './types';
 
-export function mountExampleComponent(components: readonly ElectronicComponent[], kind: 'dht11' | 'led' | 'resistor' | 'potentiometer', id: string, holeId: string): ElectronicComponent {
+export function mountExampleComponent(components: readonly ElectronicComponent[], kind: 'dht11' | 'led' | 'resistor' | 'potentiometer' | 'l293d', id: string, holeId: string): ElectronicComponent {
   const part = createComponent(kind, { x: 0, y: 0 }, id);
   const lead = componentDefinitions[kind].pins[0];
   const target = pinWorldPosition(components, { componentId: 'breadboard', pinId: holeId });

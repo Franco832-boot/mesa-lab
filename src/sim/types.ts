@@ -13,6 +13,12 @@ export type DiagnosticCode =
   | 'contradictory-sources'
   | 'unsupported-network'
   | 'reverse-polarity'
+  | 'driver-supply'
+  | 'driver-input'
+  | 'driver-overcurrent'
+  | 'motor-overload'
+  | 'battery-overcurrent'
+  | 'battery-sag'
   | 'led-overcurrent'
   | 'resistor-overpower'
   | 'gpio-overcurrent'
@@ -39,6 +45,9 @@ export interface PinResult {
   logic: LogicLevel | 'UNDEFINED';
 }
 export interface ComponentResult {
+  motor?: { direction: 'forward' | 'reverse' | 'stopped' | 'unresolved'; speed?: number; drivenFraction?: number };
+  peakCurrent?: number;
+  bridge?: readonly BridgeChannelState[];
   lcd?: LcdView;
   condition: ComponentCondition;
   current?: number;
@@ -46,10 +55,22 @@ export interface ComponentResult {
   power?: number;
   brightness?: number;
 }
+export type BridgeChannelState = 'forward' | 'reverse' | 'brake' | 'disabled' | 'invalid';
 export interface ElectricalSnapshot {
+  /** Actual elapsed electrical intervals, including intermediate GPIO events. */
+  interval?: { durationUs: number; components: Readonly<Record<string, ComponentInterval>> };
   pins: Readonly<Record<string, PinResult>>;
   components: Readonly<Record<string, ComponentResult>>;
   diagnostics: readonly SimulationIssue[];
+}
+export interface ComponentInterval {
+  meanVoltage?: number;
+  meanCurrent?: number;
+  meanPower?: number;
+  peakCurrent?: number;
+  /** Integral of absolute current over resolved intervals only (A·s). */
+  resolvedCharge: number;
+  resolvedCurrentUs: number;
 }
 /** Stateless DC interface: Phase 4 controllers supply inputs, never mutate the document. */
 export interface ElectricalEngine {

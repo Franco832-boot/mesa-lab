@@ -7,12 +7,13 @@ import type { TranslationKey } from '../locales/es/messages';
 import { createComponent, newId } from './components';
 import { mountExampleComponent as mount } from './examplePlacement';
 import { createLcdExample } from './lcdExamples';
+import { createMotorExample } from './motorExample';
 import type { LcdExampleId } from './lcdExamples';
 import { createProject, parseProject } from './project';
 import type { CircuitProject, ComponentKind, ElectronicComponent, Wire } from './types';
 
 export type ExampleCategory = 'basics' | 'sensors' | 'displays' | 'communication';
-export type ExampleId = 'dht11' | 'led-millis' | 'led-for' | 'esp-web-led' | 'esp-chat-led' | LcdExampleId;
+export type ExampleId = 'motor-l293d' | 'dht11' | 'led-millis' | 'led-for' | 'esp-web-led' | 'esp-chat-led' | LcdExampleId;
 export interface ProjectExample {
   readonly id: ExampleId;
   readonly name: TranslationKey;
@@ -30,6 +31,7 @@ export const projectExamples = [
   { id: 'dht11', name: 'exampleDhtName', description: 'exampleDhtDescription', category: 'sensors', components: ['arduino-uno', 'breadboard', 'dht11'] },
   { id: 'led-millis', name: 'exampleMillisName', description: 'exampleMillisDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'led', 'resistor'] },
   { id: 'led-for', name: 'exampleForName', description: 'exampleForDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'led', 'resistor'] },
+  { id: 'motor-l293d', name: 'exampleMotorName', description: 'exampleMotorDescription', category: 'basics', components: ['arduino-uno', 'breadboard', 'l293d', 'dc-motor', 'battery-9v'] },
   { id: 'lcd16-parallel', name: 'exampleLcd16Parallel', description: 'exampleLcdParallelDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-16x2','potentiometer','resistor'] },
   { id: 'lcd20-parallel', name: 'exampleLcd20Parallel', description: 'exampleLcdParallelDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-20x4','potentiometer','resistor'] },
   { id: 'lcd16-i2c', name: 'exampleLcd16I2c', description: 'exampleLcdI2cDescription', category: 'displays', components: ['arduino-uno','breadboard','lcd-16x2','pcf8574'] },
@@ -45,6 +47,7 @@ function wire(id: string, pinId: string, holeId: string, color: string, boardId 
 /** Each call creates a fresh, validated ordinary v1 project. Footprints and
  * dimensions come exclusively from the shared physical registry. */
 export function createExampleProject(id: ExampleId, name: string, projectId = newId()): CircuitProject {
+  if (id === 'motor-l293d') return createMotorExample(name, projectId);
   if (id === 'lcd16-parallel' || id === 'lcd20-parallel' || id === 'lcd16-i2c' || id === 'lcd20-i2c') return createLcdExample(id, name, projectId);
   const esp = id === 'esp-web-led' || id === 'esp-chat-led';
   const boardId = esp ? 'esp' : 'uno';

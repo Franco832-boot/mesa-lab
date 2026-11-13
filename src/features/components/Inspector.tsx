@@ -47,7 +47,8 @@ export function Inspector({
   const [tab, setTab] = useState<'overview' | 'pinout'>('overview');
   const [advanced, setAdvanced] = useState(locked);
   useEffect(() => { if (locked) setAdvanced(true); }, [locked]);
-  const compact = kind === 'led' || kind === 'arduino-uno' || kind === 'esp8266';
+  const motorCircuit = kind === 'dc-motor' || kind === 'l293d' || kind === 'battery-9v';
+  const compact = motorCircuit || kind === 'led' || kind === 'arduino-uno' || kind === 'esp8266';
   const entry = getCatalogEntry(kind);
   const pins = componentDefinitions[kind].pins;
   const [pinId, setPinId] = useState(pins[0]?.id ?? '');
@@ -204,6 +205,7 @@ export function Inspector({
             {!component && <p className="inspector-hint">{t('selectToEdit')}</p>}
           </>
         )}
+        {component && motorCircuit && <SimulationProperties component={component} simulation={simulation} />}
         {!isEsp && compact && <button type="button" className="inspector-more text-button" data-testid="inspector-more"
           aria-expanded={advanced} aria-controls="inspector-advanced" onClick={() => setAdvanced((value) => !value)}>
           {t('inspectorMore')} <Icon name={advanced ? 'minus' : 'plus'} size={14} />
@@ -248,7 +250,7 @@ export function Inspector({
             )}
           </div>
         )}
-        {component && <SimulationProperties component={component} simulation={simulation} />}
+        {component && !motorCircuit && <SimulationProperties component={component} simulation={simulation} />}
         <div className="info-callout">
           <Icon name="info" size={17} />
           <div>

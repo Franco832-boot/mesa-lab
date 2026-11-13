@@ -4,6 +4,7 @@ import type { SimulationIssue } from '../../sim/types';
 import { es } from '../../locales/es/messages';
 import { en } from '../../locales/en/messages';
 import { diagnosticGuidance, diagnosticRelatedComponents, groupDiagnostics } from './diagnostics';
+import { diagnosticMessages } from './messages';
 
 const issue = (changes: Partial<SimulationIssue> = {}): SimulationIssue => ({
   code: 'open-circuit', severity: 'warning', componentIds: ['r1'], pinIds: ['1', '2'], ...changes,
@@ -42,7 +43,7 @@ describe('electrical diagnostic presentation', () => {
     expect(diagnosticRelatedComponents(issue({ componentIds: ['missing'] }), [resistor])).toEqual([]);
   });
   it('provides bilingual why/action guidance for every current diagnostic model', () => {
-    expect(Object.keys(diagnosticGuidance)).toHaveLength(15);
+    expect(Object.keys(diagnosticGuidance).sort()).toEqual(Object.keys(diagnosticMessages).sort());
     for (const guidance of Object.values(diagnosticGuidance)) {
       expect(es[guidance.why].length).toBeGreaterThan(20);
       expect(en[guidance.why].length).toBeGreaterThan(20);
