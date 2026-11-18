@@ -1,12 +1,11 @@
-import { configureStore } from '@reduxjs/toolkit';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Provider } from 'react-redux';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../app/App';
+import { createAppStore } from '../../app/store';
 import { LocaleProvider } from '../../locales/LocaleProvider';
 import { createComponent } from '../../model/components';
-import { projectReducer } from '../project/projectSlice';
 import { initialSimulation } from '../simulation/runtime';
 import type { SimulationController } from '../simulation/useSimulation';
 import { ContextualInspector } from './ContextualInspector';
@@ -50,7 +49,8 @@ describe('contextual settings surfaces', () => {
   it('starts with a right-hand library after the main canvas and no permanent inspector', () => {
     vi.stubGlobal('window', { innerWidth: 1440, location: { pathname: '/' }, history: { state: null }, matchMedia: () => ({ matches: false }) });
     setLocale('en');
-    const store = configureStore({ reducer: { project: projectReducer } });
+    const { store, persistor } = createAppStore({ getItem: () => null, setItem: noop, removeItem: noop });
+    persistor.pause();
     const before = store.getState();
     const markup = renderToStaticMarkup(createElement(Provider, { store, children:
       createElement(LocaleProvider, { children: createElement(App, { saveNow: async () => true }) }),

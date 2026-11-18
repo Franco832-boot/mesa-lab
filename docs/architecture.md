@@ -43,6 +43,10 @@ Automatic writes are grouped using a 150 ms interval. Save requests a checkpoint
 
 `PersistGate` waits for reading, migration and validation before displaying the editor. Storage failures are reported and can be retried; JSON export remains available.
 
+## Accounts and cloud copies
+
+The same application store now includes transient `auth` and RTK Query `api` reducers. The existing persisted `project.document` remains the authoritative editable circuit. Authentication and API responses are not persisted; the JWT resides only in a per-store memory runtime. Guest simulation and local Save remain available. Cloud saves and opening downloaded copies require explicit user actions, and opening reuses the existing validation and immutable-backup flow. See [the real contracts, privacy behavior and verification limits](API_INTEGRATION.md).
+
 ## Versions and compatibility
 
 | Format | Version | Responsibility |
