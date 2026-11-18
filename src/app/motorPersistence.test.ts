@@ -35,7 +35,7 @@ describe('motor circuit persistence and history', () => {
       first.persistor.pause();
       const raw = values.get(PERSIST_KEY);
       if (!raw) throw new Error('No persisted project');
-      expect(Object.keys(JSON.parse(raw))).toEqual(['document', '_persist']);
+      expect(Object.keys(JSON.parse(raw))).toEqual(['document', 'cloudLinks', '_persist']);
       expect(raw).not.toMatch(/"(?:snapshot|firmware|motor|speed|condition|gpio|buttons)"\s*:/);
       const second = await open();
       try {

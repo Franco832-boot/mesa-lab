@@ -59,7 +59,7 @@ describe('Redux Toolkit + Redux Persist', () => {
     first.persistor.pause();
     const raw = values.get(PERSIST_KEY);
     if (!raw) throw new Error('Persistence did not write');
-    expect(Object.keys(JSON.parse(raw))).toEqual(['document', '_persist']);
+    expect(Object.keys(JSON.parse(raw))).toEqual(['document', 'cloudLinks', '_persist']);
     for (const key of [
       'saveStatus',
       'restoreIssue',
@@ -98,7 +98,7 @@ describe('Redux Toolkit + Redux Persist', () => {
     expect(values.has(PERSIST_KEY)).toBe(true);
     expect(values.get(STORAGE_KEY)).toBe(legacy);
   });
-  it('migrates storage v0 to v1 and discards unknown root state', async () => {
+  it('migrates storage v0 to v2 and discards unknown root state', async () => {
     const project = projectWithData();
     const envelope = JSON.stringify({
       project: JSON.stringify(project),
@@ -108,8 +108,36 @@ describe('Redux Toolkit + Redux Persist', () => {
     const { storage } = memoryStorage({ [PERSIST_KEY]: envelope });
     const app = await open(storage);
     expect(app.store.getState().project.document).toEqual(project);
-    expect(app.store.getState().project._persist.version).toBe(1);
+    expect(app.store.getState().project._persist.version).toBe(2);
     expect(app.store.getState().project).not.toHaveProperty('selection');
+  });
+  it('migrates v1 without binding existing local documents to a cloud project', async () => {
+    const document = projectWithData();
+    const envelope = JSON.stringify({ document: JSON.stringify(document),
+      _persist: JSON.stringify({ version: 1, rehydrated: true }) });
+    const { storage } = memoryStorage({ [PERSIST_KEY]: envelope });
+    const app = await open(storage);
+    expect(app.store.getState().project.document).toEqual(document);
+    expect(app.store.getState().project.cloudLinks).toEqual([]);
+    expect(app.store.getState().project._persist.version).toBe(2);
+  });
+  it('rejects invalid v2 save receipts instead of guessing a remote UUID or version', async () => {
+    const document = projectWithData();
+    const envelope = JSON.stringify({ document: JSON.stringify(document), cloudLinks: JSON.stringify([
+      { documentId: document.id, remote: { id: 'bad-id', userId: 'bad-owner', version: 0 }, pending: null, savedFingerprint: null },
+    ]), _persist: JSON.stringify({ version: 2 }) });
+    const { storage, values } = memoryStorage({ [PERSIST_KEY]: envelope });
+    const app = await open(storage);
+    expect(app.store.getState().project.restoreIssue).toBe(true);
+    expect(values.get(RECOVERY_KEY)).toBe(envelope);
+  });
+  it('synchronously checkpoints the latest edit before a page lifecycle event, without persisting runtime state', async () => {
+    const { storage, values } = memoryStorage(); const app = await open(storage);
+    app.store.dispatch(nameChanged('Last keystroke before reload'));
+    expect(app.backupNow()).toBe(true);
+    const persisted = decodePersistedProject(values.get(PERSIST_KEY) ?? '');
+    expect(persisted.document.name).toBe('Last keystroke before reload');
+    expect(persisted).not.toHaveProperty('cloudStatus');
   });
   it.each([
     '{invalid',

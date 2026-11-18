@@ -3,7 +3,9 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import { API_BASE_URL, API_TIMEOUT_MS } from './config';
 import { apiRuntime } from './runtime';
 
-export function clientError(error: string): FetchBaseQueryError { return { status: 'CUSTOM_ERROR', error }; }
+export function clientError(error: string, data?: unknown): FetchBaseQueryError {
+  return data === undefined ? { status: 'CUSTOM_ERROR', error } : { status: 'CUSTOM_ERROR', error, data };
+}
 const transport = fetchBaseQuery({
   baseUrl: API_BASE_URL, credentials: 'omit', cache: 'no-store', redirect: 'error',
   timeout: API_TIMEOUT_MS, headers: { Accept: 'application/json' },
@@ -33,7 +35,7 @@ export const sessionBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBas
       if (runtime.epoch !== epoch || controller.signal.aborted) return { error: clientError('session-changed') };
       if (!options.public && result.error?.status === 401) {
         runtime.onExpired();
-        return { error: clientError('session-changed') };
+        return { error: result.error };
       }
       // Request/Response metadata can retain authorization headers and password bodies.
       return result.error ? { error: result.error } : { data: result.data };

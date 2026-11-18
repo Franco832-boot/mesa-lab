@@ -46,7 +46,7 @@ describe('authentication transport and session isolation', () => {
     expect(app.store.getState().auth.user).toEqual(alice);
     await app.saveNow();
     const persisted = values.get(PERSIST_KEY) ?? '';
-    expect(Object.keys(JSON.parse(persisted))).toEqual(['document', '_persist']);
+    expect(Object.keys(JSON.parse(persisted))).toEqual(['document', 'cloudLinks', '_persist']);
     expect(persisted).not.toContain(alice.email); expect(persisted).not.toContain(token);
     operation.reset();
   });

@@ -3,17 +3,18 @@ import { createAppStore } from '../../app/store';
 import { submitAuthentication } from '../../features/auth/authenticate';
 import { sessionEnded } from '../../features/auth/authSlice';
 import { createProject } from '../../model/project';
-import { canonicalJson, cloudDocumentSize, prepareCloudProject, readCloudProject } from '../../features/cloudProjects/document';
+import { cloudDocumentSize, prepareCloudProject, readCloudProject } from '../../features/cloudProjects/document';
 import { isJsonObject } from './contracts';
 import type { CreateProjectRequest, ProjectResponse } from './contracts';
 import { projectsApi } from './projectsApi';
 import { tasksApi } from './tasksApi';
+import { API_BASE_URL } from './config';
 
 const user = { id: '11111111-1111-4111-8111-111111111111', email: 'alice@example.test', createdAt: '2026-11-17T12:00:00.000Z' };
 const otherUserId = '22222222-2222-4222-8222-222222222222';
 const remoteId = '33333333-3333-4333-8333-333333333333';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
-const response = (request: CreateProjectRequest): ProjectResponse => ({ ...request, id: remoteId, userId: user.id, createdAt: user.createdAt, updatedAt: user.createdAt });
+const response = (request: CreateProjectRequest): ProjectResponse => ({ ...request, id: remoteId, userId: user.id, version: 1, createdAt: user.createdAt, updatedAt: user.createdAt });
 let app: ReturnType<typeof createAppStore>;
 beforeEach(async () => {
   const values = new Map<string, string>();
@@ -22,6 +23,7 @@ beforeEach(async () => {
   await app.store.dispatch(submitAuthentication('login', { email: user.email, password: 'Fictional-password-123' })).unwrap();
 });
 afterEach(async () => {
+  app.projectSync.dispose();
   app.store.dispatch(sessionEnded(null));
   await app.persistor.flush(); app.persistor.pause(); vi.unstubAllGlobals(); vi.useRealTimers();
 });
@@ -33,6 +35,11 @@ describe('real project and task contracts', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: Request) => {
       expect(input.headers.get('authorization')).toBe('Bearer fictional-token');
       expect(input.method).toBe('GET');
+      expect(input.url.startsWith(API_BASE_URL + '/')).toBe(true);
+      expect(input.body).toBeNull();
+      expect(input.headers.has('if-match')).toBe(false);
+      expect(input.headers.has('idempotency-key')).toBe(false);
+      expect(input.headers.has('content-type')).toBe(false);
       return json(input.url.endsWith('/tasks') ? [task] : input.url.endsWith(`/projects/${remoteId}`) ? project : [project]);
     }));
     const list = app.store.dispatch(projectsApi.endpoints.getProjects.initiate());
@@ -47,78 +54,54 @@ describe('real project and task contracts', () => {
     const project = { ...response(prepareCloudProject(createProject(), 'Private')), userId: otherUserId };
     vi.stubGlobal('fetch', vi.fn(async () => json([project])));
     const list = app.store.dispatch(projectsApi.endpoints.getProjects.initiate());
-    await expect(list.unwrap()).rejects.toMatchObject({ error: 'invalid-response' }); list.unsubscribe();
+    await expect(list.unwrap()).rejects.toMatchObject({ error: 'invalid-project-response', data: { httpStatus: 200 } }); list.unsubscribe();
     const task = { id: remoteId, userId: otherUserId, title: 'Foreign task', completed: false, createdAt: user.createdAt };
     vi.stubGlobal('fetch', vi.fn(async () => json([task])));
     const tasks = app.store.dispatch(tasksApi.endpoints.getTasks.initiate());
     await expect(tasks.unwrap()).rejects.toMatchObject({ error: 'invalid-response' }); tasks.unsubscribe();
     expect(JSON.stringify(app.store.getState())).not.toContain('Foreign task');
   });
-  it('reads before creating and POSTs exactly { name, data } once', async () => {
-    const request = prepareCloudProject(createProject('local-id'), '  My cloud copy  ');
-    const methods: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: Request) => {
-      methods.push(input.method);
-      if (input.method === 'GET') return json([]);
-      expect(await input.json()).toEqual(request);
-      return json(response(request), 201);
-    }));
-    const before = app.store.getState().project.document;
-    expect(await app.store.dispatch(projectsApi.endpoints.createProject.initiate(request)).unwrap()).toEqual(response(request));
-    expect(methods).toEqual(['GET', 'POST']);
-    expect(app.store.getState().project.document).toBe(before);
-  });
-  it('does not duplicate an identical JSONB document with reordered object keys', async () => {
-    const request: CreateProjectRequest = { name: 'Same copy', data: { a: 1, b: { x: true, y: false } } };
-    const existing = response({ name: request.name, data: { b: { y: false, x: true }, a: 1 } });
-    const fetch = vi.fn(async () => json([existing])); vi.stubGlobal('fetch', fetch);
-    expect(await app.store.dispatch(projectsApi.endpoints.createProject.initiate(request)).unwrap()).toEqual(existing);
+  it('POSTs exactly the request body and a UUID v4 idempotency header, without a preflight list', async () => {
+    const body = prepareCloudProject(createProject('local-id'), 'My cloud project');
+    const fetch = vi.fn(async (input: Request) => {
+      expect(input.method).toBe('POST');
+      expect(input.url).toBe(`${API_BASE_URL}/projects`);
+      expect(input.headers.get('idempotency-key')).toBe(remoteId);
+      expect(input.headers.has('if-match')).toBe(false);
+      expect(await input.json()).toEqual(body);
+      return json(response(body), 201);
+    });
+    vi.stubGlobal('fetch', fetch);
+    expect(await app.store.dispatch(projectsApi.endpoints.createProject.initiate({ key: remoteId, body })).unwrap()).toEqual(response(body));
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(canonicalJson(existing.data)).toBe(canonicalJson(request.data));
   });
-  it('prevents overlapping creates across mutation instances', async () => {
-    const request = prepareCloudProject(createProject(), 'Concurrent');
-    let release: ((response: Response) => void) | undefined;
-    let started: (() => void) | undefined;
-    const waiting = new Promise<void>(resolve => { started = resolve; });
+  it('PATCH sends the last version in the body to the existing UUID, keeping write headers off GET', async () => {
+    const body = prepareCloudProject(createProject('local-id'), 'Updated project');
     vi.stubGlobal('fetch', vi.fn(async (input: Request) => {
-      if (input.method === 'GET') { started?.(); return new Promise<Response>(resolve => { release = resolve; }); }
-      return json(response(request), 201);
+      expect(input.url).toBe(`${API_BASE_URL}/projects/${remoteId}`);
+      expect(input.method).toBe('PATCH');
+      expect(input.headers.get('idempotency-key')).toBe(remoteId);
+      expect(await input.json()).toEqual({ ...body, version: 3 });
+      return json({ ...response(body), version: 4 });
     }));
-    const first = app.store.dispatch(projectsApi.endpoints.createProject.initiate(request));
-    await waiting;
-    await expect(app.store.dispatch(projectsApi.endpoints.createProject.initiate(request)).unwrap()).rejects.toMatchObject({ error: 'create-busy' });
-    release?.(json([])); expect(await first.unwrap()).toEqual(response(request));
+    const result = await app.store.dispatch(projectsApi.endpoints.updateProject.initiate({ key: remoteId, id: remoteId, body: { ...body, version: 3 } })).unwrap();
+    expect(result.id).toBe(remoteId); expect(result.version).toBe(4);
   });
-  it('reconciles a committed write with a lost response, without issuing another POST', async () => {
-    const request = prepareCloudProject(createProject(), 'Lost response');
-    let stored: ProjectResponse[] = [], writes = 0;
-    vi.stubGlobal('fetch', vi.fn(async (input: Request) => {
-      if (input.method === 'GET') return json(stored);
-      writes++; stored = [response(request)];
-      throw new TypeError('Simulated disconnected response');
-    }));
-    await expect(app.store.dispatch(projectsApi.endpoints.createProject.initiate(request)).unwrap()).rejects.toMatchObject({ error: 'save-uncertain' });
-    expect(writes).toBe(1);
-    expect(await app.store.dispatch(projectsApi.endpoints.createProject.initiate(request)).unwrap()).toEqual(stored[0]);
-    expect(writes).toBe(1);
+  it.each([400, 403, 404, 409, 412, 500, 503])('retains HTTP %s instead of replacing it with a generic error', async status => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ statusCode: status, message: 'Fictional error', timestamp: user.createdAt }, status)));
+    const query = app.store.dispatch(projectsApi.endpoints.getProjects.initiate());
+    await expect(query.unwrap()).rejects.toMatchObject({ status }); query.unsubscribe();
   });
-  it('does not resend an uncertain write if a later read cannot confirm it', async () => {
-    const request = prepareCloudProject(createProject(), 'Uncertain');
-    let writes = 0;
-    vi.stubGlobal('fetch', vi.fn(async (input: Request) => {
-      if (input.method === 'GET') return json([]);
-      writes++; return json({ statusCode: 500, message: 'Error interno del servidor', timestamp: user.createdAt }, 500);
-    }));
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await expect(app.store.dispatch(projectsApi.endpoints.createProject.initiate(request)).unwrap()).rejects.toMatchObject({ error: 'save-uncertain' });
-    }
-    expect(writes).toBe(1);
+  it.each([{ items: [] }, [{ ...response({ name: 'Existing', data: {} }), version: undefined }],
+    [{ ...response({ name: 'Existing', data: {} }), version: 0 }]])('reports contract errors as HTTP 200 validation failures', async data => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(data)));
+    const query = app.store.dispatch(projectsApi.endpoints.getProjects.initiate());
+    await expect(query.unwrap()).rejects.toMatchObject({ error: 'invalid-project-response', data: { httpStatus: 200 } }); query.unsubscribe();
   });
-  it('does not POST if the preflight read fails, and does not automatically retry', async () => {
-    const fetch = vi.fn(async () => { throw new TypeError('Offline'); }); vi.stubGlobal('fetch', fetch);
-    await expect(app.store.dispatch(projectsApi.endpoints.createProject.initiate(prepareCloudProject(createProject(), 'Offline'))).unwrap()).rejects.toMatchObject({ status: 'FETCH_ERROR' });
-    expect(fetch).toHaveBeenCalledTimes(1);
+  it('distinguishes a non-JSON server error from a rejected project contract', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Gateway unavailable</html>', { status: 502 })));
+    const query = app.store.dispatch(projectsApi.endpoints.getProjects.initiate());
+    await expect(query.unwrap()).rejects.toMatchObject({ status: 'PARSING_ERROR', originalStatus: 502 }); query.unsubscribe();
   });
   it('ignores a late private list after switching accounts', async () => {
     const project = response(prepareCloudProject(createProject(), 'Private old project'));
@@ -139,7 +122,7 @@ describe('cloud document boundaries', () => {
     const exact = { code: 'ñ'.repeat(131066) + 'x' };
     expect(cloudDocumentSize(exact)).toBe(262144);
     const fetch = vi.fn(async () => json([])); vi.stubGlobal('fetch', fetch);
-    await expect(app.store.dispatch(projectsApi.endpoints.createProject.initiate({ name: 'Too big', data: { code: exact.code + 'x' } })).unwrap()).rejects.toMatchObject({ error: 'project-too-large' });
+    await expect(app.store.dispatch(projectsApi.endpoints.createProject.initiate({ key: remoteId, body: { name: 'Too big', data: { code: exact.code + 'x' } } })).unwrap()).rejects.toMatchObject({ error: 'project-too-large' });
     expect(fetch).not.toHaveBeenCalled();
   });
   it('accepts valid simulator data without mutating it and rejects generic backend JSON', () => {
