@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useAppDispatch, useAppSelector } from '../../app/hooks';
 import { useLocale } from '../../locales/useLocale';
 import { Dialog } from '../../shared/Dialog';
+import { Icon } from '../../shared/Icon';
 import { useMeQuery } from '../../services/api/authApi';
 import { apiErrorMessage } from '../../services/api/errors';
 import { submitAuthentication } from './authenticate';
@@ -59,17 +60,60 @@ export function AccountControls() {
   const dispatch = useAppDispatch();
   const { user, reason } = useAppSelector(state => state.auth);
   const [mode, setMode] = useState<AuthMode | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const me = useMeQuery(undefined, { skip: user === null });
-  return <div className="account-controls" data-testid="account-controls">
-    {user ? <>
-      <span className="account-email" title={user.email}>{user.email}</span>
-      <button className="text-button" onClick={() => dispatch(sessionEnded('signed-out'))}>{t('authLogout')}</button>
-      {me.isError && <span role="status">{t(apiErrorMessage(me.error))}</span>}
-    </> : <>
-      <button className="text-button" onClick={() => setMode('login')}>{t('authLogin')}</button>
-      <button className="secondary-button" onClick={() => setMode('register')}>{t('authRegister')}</button>
-      {reason === 'expired' && <span className="account-session-status" role="status">{t('authExpired')}</span>}
-    </>}
-    {mode && <AuthForm key={mode} mode={mode} onClose={() => setMode(null)} />}
+  useEffect(() => { setMenuOpen(false); }, [user?.id, reason]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !container.current?.contains(event.target)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [menuOpen]);
+  const closeMenu = () => { setMenuOpen(false); trigger.current?.focus(); };
+  const menuKeys = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }
+    if (event.key === 'Tab') { setMenuOpen(false); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const items = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+    const index = items.findIndex(item => item === document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+      : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
+    items[next]?.focus();
+  };
+  const openForm = (next: AuthMode) => { setMenuOpen(false); setMode(next); };
+  return <div className="account-controls" data-testid="account-controls" ref={container}
+    onBlur={event => {
+      if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+    }}>
+    <button ref={trigger} type="button" className="account-trigger" id="account-trigger"
+      aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? 'account-options' : undefined}
+      onClick={() => setMenuOpen(previous => !previous)}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setMenuOpen(true); }
+      }}>
+      <span className="account-avatar" aria-hidden="true">{user ? user.email.slice(0, 1).toUpperCase() : <Icon name="lock" size={15} />}</span>
+      <span>{t(user ? 'accountMenu' : 'authLogin')}</span><Icon name="down" size={14} />
+    </button>
+    {reason === 'expired' && <span className="account-session-status" role="status" title={t('authExpired')}>{t('authExpiredShort')}</span>}
+    {menuOpen && <div className="account-menu" id="account-options" role="menu" aria-labelledby="account-trigger" ref={menu} onKeyDown={menuKeys}>
+      {user ? <>
+        <div className="account-identity" role="none"><span>{t('accountSignedIn')}</span><strong className="account-email">{user.email}</strong></div>
+        {me.isError && <p className="account-error" role="status">{t(apiErrorMessage(me.error))}</p>}
+        <button type="button" role="menuitem" onClick={() => { closeMenu(); dispatch(sessionEnded('signed-out')); }}>
+          <Icon name="arrow" size={16} />{t('authLogout')}
+        </button>
+      </> : <>
+        <button type="button" role="menuitem" onClick={() => openForm('login')}>{t('authLogin')}</button>
+        <button type="button" role="menuitem" onClick={() => openForm('register')}>{t('authRegister')}</button>
+      </>}
+    </div>}
+    {mode && <AuthForm key={mode} mode={mode} onClose={() => { setMode(null); trigger.current?.focus(); }} />}
   </div>;
 }
