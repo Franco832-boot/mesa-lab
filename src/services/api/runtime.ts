@@ -11,8 +11,6 @@ export class ApiRuntime {
   private controllers = new Set<AbortController>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   onExpired: () => void = () => undefined;
-  creating = false;
-  readonly uncertainCreates = new Set<string>();
 
   clear(): void {
     this.epoch++;
@@ -23,8 +21,6 @@ export class ApiRuntime {
     clearTimeout(this.timer);
     for (const controller of this.controllers) controller.abort();
     this.controllers.clear();
-    this.creating = false;
-    this.uncertainCreates.clear();
   }
   authorization(): string | null {
     if (this.token && Date.now() >= this.expiresAt) { this.onExpired(); return null; }

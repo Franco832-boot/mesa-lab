@@ -53,7 +53,7 @@ describe('contextual settings surfaces', () => {
     persistor.pause();
     const before = store.getState();
     const markup = renderToStaticMarkup(createElement(Provider, { store, children:
-      createElement(LocaleProvider, { children: createElement(App, { saveNow: async () => true }) }),
+      createElement(LocaleProvider, { children: createElement(App, { saveProject: async (): Promise<'local'> => 'local' }) }),
     }));
     expect(markup.indexOf('data-testid="component-library"')).toBeGreaterThan(markup.indexOf('data-testid="workspace-stage"'));
     expect(markup).toContain('data-testid="library-toggle"');

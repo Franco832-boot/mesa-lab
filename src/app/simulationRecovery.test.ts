@@ -83,7 +83,7 @@ describe('Phase 3 editor, electrical engine and persistence integration', () => 
         typeof envelope !== 'object' || envelope === null ||
         !('document' in envelope) || typeof envelope.document !== 'string'
       ) throw new Error('Unexpected persistence envelope');
-      expect(Object.keys(envelope)).toEqual(['document', '_persist']);
+      expect(Object.keys(envelope)).toEqual(['document', 'cloudLinks', '_persist']);
       expect(JSON.parse(envelope.document)).toEqual(project);
       second = createAppStore(storage);
       await ready(second);

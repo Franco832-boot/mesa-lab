@@ -10,11 +10,14 @@ export interface AuthResponse {
   user: UserResponse;
 }
 export interface CreateProjectRequest { name: string; data: JsonObject }
+export interface CreateProjectOperation { key: string; body: CreateProjectRequest }
+export interface UpdateProjectOperation { key: string; id: string; body: CreateProjectRequest & { version: number } }
 export interface ProjectResponse extends CreateProjectRequest {
   id: string;
   userId: string;
   createdAt: string;
   updatedAt: string;
+  version: number;
 }
 export interface TaskResponse {
   id: string;
@@ -28,7 +31,7 @@ export interface ErrorResponse { statusCode: number; message: string | string[];
 export function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-const uuid = (value: unknown): value is string => typeof value === 'string'
+export const uuid = (value: unknown): value is string => typeof value === 'string'
   && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const date = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value));
 export function isUser(value: unknown): value is UserResponse {
@@ -68,7 +71,10 @@ export function isJsonObject(value: unknown): value is JsonObject {
 }
 export function isProject(value: unknown): value is ProjectResponse {
   return record(value) && uuid(value.id) && uuid(value.userId) && typeof value.name === 'string'
-    && isJsonObject(value.data) && date(value.createdAt) && date(value.updatedAt);
+    && isJsonObject(value.data) && date(value.createdAt) && date(value.updatedAt) && validProjectVersion(value.version);
+}
+export function validProjectVersion(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2147483647;
 }
 export function isTask(value: unknown): value is TaskResponse {
   return record(value) && uuid(value.id) && uuid(value.userId) && typeof value.title === 'string'

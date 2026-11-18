@@ -11,6 +11,7 @@ import { sessionEnded } from '../features/auth/authSlice';
 import { nameChanged } from '../features/project/projectSlice';
 import type { ProjectResponse } from '../services/api/contracts';
 import { isProject } from '../services/api/contracts';
+import { API_BASE_URL } from '../services/api/config';
 
 // These are unit tests with in-memory fetch responses. They open no HTTP server or browser.
 const user = { id: '11111111-1111-4111-8111-111111111111', email: 'fixture@example.test', createdAt: '2026-11-17T12:00:00.000Z' };
@@ -44,6 +45,12 @@ beforeEach(() => {
       return json({ accessToken: token, tokenType: 'Bearer', expiresIn: 900, user }, path.endsWith('register') ? 201 : 200);
     }
     expect(request.headers.get('authorization')).toBe(`Bearer ${token}`);
+    expect(request.url.startsWith(`${API_BASE_URL}/`)).toBe(true);
+    if (request.method === 'GET') {
+      expect(request.headers.has('idempotency-key')).toBe(false);
+      expect(request.headers.has('if-match')).toBe(false);
+      expect(request.body).toBeNull();
+    }
     if (path === '/auth/me') return json(user);
     if (path === '/tasks') throw new Error('The project interface must not request tasks');
     if (path === '/projects' && request.method === 'GET') return json(projects);
@@ -51,18 +58,30 @@ beforeEach(() => {
       const body: unknown = await request.json();
       if (typeof body !== 'object' || body === null || !('name' in body) || !('data' in body)) throw new Error('Unexpected request contract');
       writes++;
-      const project = { ...body, id: '33333333-3333-4333-8333-333333333333', userId: user.id, createdAt: user.createdAt, updatedAt: user.createdAt };
+      const project = { ...body, id: '33333333-3333-4333-8333-333333333333', userId: user.id, version: 1, createdAt: user.createdAt, updatedAt: user.createdAt };
       if (!isProject(project)) throw new Error('Invalid fixture contract');
       projects.push(project);
       return json(project, 201);
     }
     const found = projects.find(project => path === `/projects/${project.id}`);
+    if (found && request.method === 'PATCH') {
+      const body: unknown = await request.json();
+      if (typeof body !== 'object' || body === null || !('version' in body) || !('data' in body) || !('name' in body)) throw new Error('Unexpected PATCH body');
+      expect(body.version).toBe(found.version);
+      expect(request.headers.get('idempotency-key')).toMatch(/^[0-9a-f-]{36}$/);
+      const updated = { ...found, name: body.name, data: body.data, version: found.version + 1 };
+      if (!isProject(updated)) throw new Error('Invalid updated fixture');
+      projects = projects.map(project => project.id === found.id ? updated : project);
+      writes++;
+      return json(updated);
+    }
     if (found) return json(found);
     throw new Error(`Unexpected API operation: ${request.method} ${path}`);
   }));
 });
 afterEach(async () => {
   await act(async () => root?.unmount());
+  app?.projectSync.dispose();
   app?.store.dispatch(sessionEnded(null));
   app?.persistor.pause(); await app?.persistor.flush();
   container.remove(); root = undefined; app = undefined;
@@ -118,7 +137,7 @@ async function authenticate(mode = 'Sign in') {
   await settled(() => { expect(app?.store.getState().auth.user).toEqual(user); });
 }
 const remote = (data: ProjectResponse['data']): ProjectResponse => ({ id: '33333333-3333-4333-8333-333333333333', userId: user.id,
-  name: 'Remote private copy', data, createdAt: user.createdAt, updatedAt: user.createdAt });
+  name: 'Remote private copy', version: 1, data, createdAt: user.createdAt, updatedAt: user.createdAt });
 
 describe('account and cloud UI with the existing application store', () => {
   it.each([{ locale: 'en', register: 'Sign up', login: 'Sign in', logout: 'Sign out' },
@@ -153,7 +172,7 @@ describe('account and cloud UI with the existing application store', () => {
     expect(current.store.getState().auth.user).toBeNull(); expect(current.store.getState().project.document).toBe(document);
     expect(element('input[name=password]')).toHaveProperty('value', '');
   });
-  it.each([false, true])('keeps one visible Save action and saves only locally (signed in: %s)', async signedIn => {
+  it.each([false, true])('keeps one Save action and selects local or cloud persistence (signed in: %s)', async signedIn => {
     const current = await mount();
     if (signedIn) await authenticate();
     await act(async () => { current.store.dispatch(nameChanged('Local draft')); });
@@ -162,11 +181,11 @@ describe('account and cloud UI with the existing application store', () => {
     expect(header.textContent).not.toContain('Save a cloud copy');
     expect(container.textContent).not.toContain('My tasks');
     await click(button('Save'));
-    await settled(() => { expect(element('#project-save-status').textContent).toContain('Saved locally'); });
+    await settled(() => { expect(element('#project-save-status').textContent).toContain(signedIn ? 'Saved to the cloud' : 'Saved locally'); });
     expect(localStorage.getItem('persist:mesa.project')).toContain('Local draft');
-    expect(writes).toBe(0);
+    expect(writes).toBe(signedIn ? 1 : 0);
     expect(requests).not.toContain('GET /tasks');
-    expect(requests.some(request => /^(POST|PATCH) \/projects/.test(request))).toBe(false);
+    expect(requests.some(request => /^(POST|PATCH) \/projects/.test(request))).toBe(signedIn);
     expect(current.store.getState().project.document.name).toBe('Local draft');
   });
   it('opens only after confirmation and preserves an immutable local backup', async () => {
@@ -178,14 +197,55 @@ describe('account and cloud UI with the existing application store', () => {
     expect(current.store.getState().project.document.name).toBe('Existing local project');
     await settled(() => { expect(button('Open project', element('dialog'))).toHaveProperty('disabled', false); });
     await click(button('Open project', element('dialog')));
-    expect(current.store.getState().project.document.name).toBe('Downloaded local copy');
+    expect(current.store.getState().project.document.name).toBe('Remote private copy');
+    expect(current.store.getState().project.document.id).toBe(projects[0]?.id);
+    expect(current.store.getState().project.cloudLinks[0]?.remote).toEqual({ id: projects[0]?.id, userId: user.id, version: 1 });
     const backups = Object.keys(localStorage).filter(key => key.startsWith(EXAMPLE_BACKUP_PREFIX));
     expect(backups).toHaveLength(1);
     expect(localStorage.getItem(backups[0] ?? '')).toContain('Existing local project');
     await click(element('.account-trigger'));
     await click(button('Sign out', element('[role=menu]')));
     expect(element('[data-testid=cloud-projects]').textContent).not.toContain('Remote private copy');
-    expect(current.store.getState().project.document.name).toBe('Downloaded local copy');
+    expect(current.store.getState().project.document.name).toBe('Remote private copy');
+    expect(current.store.getState().project.document.id).toBe(projects[0]?.id);
+    expect(current.store.getState().project.cloudLinks[0]?.remote).toEqual({ id: projects[0]?.id, userId: user.id, version: 1 });
+  });
+  it('loads the list on login, opens the remote UUID/version and saves changes with PATCH from the single Save action', async () => {
+    projects = [remote({ format: 'mesa-circuit', version: 1, id: 'legacy-document-id', name: 'Original document',
+      components: [], wires: [], programs: [], viewport: { zoom: 1, offset: { x: 0, y: 0 } } })];
+    const current = await mount();
+    expect(requests).toEqual([]); await authenticate();
+    await settled(() => expect(container.querySelectorAll('.cloud-project-card')).toHaveLength(1));
+    expect(requests).toContain('GET /projects');
+    await click(button('Open project'));
+    await settled(() => expect(button('Open project', element('dialog'))).toHaveProperty('disabled', false));
+    await click(button('Open project', element('dialog')));
+    expect(current.store.getState().project.document.id).toBe(projects[0]?.id);
+    await fill('input[aria-label="Project name"]', 'Updated from editor');
+    expect(element('#project-save-status').textContent).toContain('Changes pending');
+    await click(button('Save'));
+    await settled(() => expect(element('#project-save-status').textContent).toContain('Saved to the cloud'));
+    expect(requests).toContain(`PATCH /projects/${projects[0]?.id}`);
+    expect(requests).not.toContain('POST /projects'); expect(writes).toBe(1);
+    expect(projects[0]?.name).toBe('Updated from editor');
+    expect(current.store.getState().project.cloudLinks[0]?.remote?.version).toBe(2);
+  });
+  it.each([{ locale: 'en', expected: 'server could not' }, { locale: 'es', expected: 'servidor no pudo' }])('shows HTTP 500 with a server message, keeps cached projects and recovers on refresh in $locale', async ({ locale, expected }) => {
+    localStorage.setItem('mesa.locale', locale);
+    projects = [remote({})]; const current = await mount(); await authenticate(locale === 'en' ? 'Sign in' : 'Ingresar');
+    await settled(() => expect(container.querySelectorAll('.cloud-project-card')).toHaveLength(1));
+    const original = current.store.getState().project.document;
+    const fetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn(async () => json({ statusCode: 500, message: 'Internal server error' }, 500)));
+    await click(button(locale === 'en' ? 'Refresh' : 'Actualizar'));
+    await settled(() => {
+      expect(element('.cloud-feedback[role=alert]').textContent).toContain('HTTP 500');
+      expect(element('.cloud-feedback[role=alert]').textContent).toContain(expected);
+    });
+    expect(container.querySelectorAll('.cloud-project-card')).toHaveLength(1);
+    expect(current.store.getState().project.document).toBe(original); expect(writes).toBe(0);
+    vi.stubGlobal('fetch', fetch); await click(button(locale === 'en' ? 'Refresh' : 'Actualizar'));
+    await settled(() => expect(container.querySelector('.cloud-feedback[role=alert]')).toBeNull());
   });
   it.each(['invalid', 'backup-quota'] as const)('preserves the local document if remote opening fails: %s', async failure => {
     projects = [remote(failure === 'invalid' ? {} : { format: 'mesa-circuit', version: 1, id: 'downloaded-id', name: 'Downloaded',
@@ -212,7 +272,7 @@ describe('account and cloud UI with the existing application store', () => {
     localStorage.setItem(STORAGE_KEY, serializeProject(project));
     const current = await mount(); await authenticate();
     await click(button('Save'));
-    await settled(() => { expect(element('#project-save-status').textContent).toContain('Saved locally'); });
+    await settled(() => { expect(element('#project-save-status').textContent).toContain('Synchronization failed'); });
     expect(writes).toBe(0);
     expect(current.store.getState().project.document.programs[0]?.source.length).toBe(270002);
     expect(localStorage.getItem('persist:mesa.project')).toContain('x'.repeat(270000));

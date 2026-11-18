@@ -1,6 +1,6 @@
 import { baseApi, clientError } from './baseApi';
-import { isJsonObject, isProject } from './contracts';
-import type { CreateProjectRequest, ProjectResponse } from './contracts';
+import { isJsonObject, isProject, uuid, validProjectVersion } from './contracts';
+import type { CreateProjectOperation, ProjectResponse, UpdateProjectOperation } from './contracts';
 import { apiRuntime } from './runtime';
 import { canonicalJson, cloudDocumentSize, MAX_CLOUD_DOCUMENT_BYTES } from '../../features/cloudProjects/document';
 
@@ -13,7 +13,7 @@ export const projectsApi = baseApi.injectEndpoints({
       async queryFn(_arg, api, _options, query) {
         const result = await query('/projects');
         if (result.error) return { error: result.error };
-        if (!ownedProjects(result.data, apiRuntime(api.extra).userId)) return { error: clientError('invalid-response') };
+        if (!ownedProjects(result.data, apiRuntime(api.extra).userId)) return { error: clientError('invalid-project-response', { httpStatus: 200 }) };
         return { data: result.data };
       },
       providesTags: ['Projects'],
@@ -23,50 +23,43 @@ export const projectsApi = baseApi.injectEndpoints({
         const result = await query(`/projects/${encodeURIComponent(id)}`);
         if (result.error) return { error: result.error };
         if (!isProject(result.data) || result.data.id !== id || result.data.userId !== apiRuntime(api.extra).userId) {
-          return { error: clientError('invalid-response') };
+          return { error: clientError('invalid-project-response', { httpStatus: 200 }) };
         }
         return { data: result.data };
       },
     }),
-    createProject: build.mutation<ProjectResponse, CreateProjectRequest>({
-      async queryFn(request, api, _options, query) {
-        const runtime = apiRuntime(api.extra);
-        if (!isJsonObject(request.data) || !request.name.trim() || request.name.trim().length > 120) return { error: clientError('invalid-document') };
-        if (cloudDocumentSize(request.data) > MAX_CLOUD_DOCUMENT_BYTES) return { error: clientError('project-too-large') };
-        if (runtime.creating) return { error: clientError('create-busy') };
-        const epoch = runtime.epoch;
-        const name = request.name.trim();
-        const documentIdentity = canonicalJson(request.data);
-        const identity = `${JSON.stringify(name)}:${documentIdentity}`;
-        runtime.creating = true;
-        try {
-          // A read precedes every explicit create, including a manual attempt after an uncertain result.
-          const list = await query('/projects');
-          if (list.error) return { error: list.error };
-          if (!ownedProjects(list.data, runtime.userId)) return { error: clientError('invalid-response') };
-          const existing = list.data.find(project => project.name === name && canonicalJson(project.data) === documentIdentity);
-          if (existing) { runtime.uncertainCreates.delete(identity); return { data: existing }; }
-          if (runtime.uncertainCreates.has(identity)) return { error: clientError('save-uncertain') };
-          if (runtime.epoch !== epoch || api.signal.aborted) return { error: clientError('session-changed') };
-          const result = await query({ url: '/projects', method: 'POST', body: { name, data: request.data } });
-          if (result.error) {
-            // A timeout, dropped response or 5xx does not prove that the write failed.
-            if (runtime.epoch === epoch && ![400, 401, 413, 415].includes(Number(result.error.status))) {
-              runtime.uncertainCreates.add(identity);
-              return { error: clientError('save-uncertain') };
-            }
-            return { error: result.error };
-          }
-          if (!isProject(result.data) || result.data.userId !== runtime.userId || result.data.name !== name
-            || canonicalJson(result.data.data) !== documentIdentity) {
-            runtime.uncertainCreates.add(identity);
-            return { error: clientError('save-uncertain') };
-          }
-          return { data: result.data };
-        } finally { if (runtime.epoch === epoch) runtime.creating = false; }
+    createProject: build.mutation<ProjectResponse, CreateProjectOperation>({
+      async queryFn({ key, body }, api, _options, query) {
+        const invalid = validateWrite(key, body);
+        if (invalid) return { error: clientError(invalid) };
+        const result = await query({ url: '/projects', method: 'POST', headers: { 'Idempotency-Key': key }, body });
+        if (result.error) return { error: result.error };
+        if (!isProject(result.data) || result.data.userId !== apiRuntime(api.extra).userId
+          || result.data.name !== body.name || canonicalJson(result.data.data) !== canonicalJson(body.data)) {
+          return { error: clientError('save-uncertain') };
+        }
+        return { data: result.data };
+      },
+      invalidatesTags: (_result, error) => error ? [] : ['Projects'],
+    }),
+    updateProject: build.mutation<ProjectResponse, UpdateProjectOperation>({
+      async queryFn({ key, id, body }, api, _options, query) {
+        const invalid = validateWrite(key, body);
+        if (invalid || !uuid(id) || !validProjectVersion(body.version)) return { error: clientError(invalid ?? 'invalid-document') };
+        // The published backend compares body.version atomically; it does not implement If-Match.
+        const result = await query({ url: `/projects/${id}`, method: 'PATCH', headers: { 'Idempotency-Key': key }, body });
+        if (result.error) return { error: result.error };
+        if (!isProject(result.data) || result.data.id !== id || result.data.userId !== apiRuntime(api.extra).userId
+          || result.data.version !== body.version + 1 || result.data.name !== body.name
+          || canonicalJson(result.data.data) !== canonicalJson(body.data)) return { error: clientError('save-uncertain') };
+        return { data: result.data };
       },
       invalidatesTags: (_result, error) => error ? [] : ['Projects'],
     }),
   }),
 });
-export const { useGetProjectsQuery, useLazyGetProjectQuery, useCreateProjectMutation } = projectsApi;
+function validateWrite(key: string, body: { name: string; data: unknown }): string | null {
+  if (!uuid(key) || !isJsonObject(body.data) || !body.name.trim() || body.name !== body.name.trim() || body.name.length > 120) return 'invalid-document';
+  return cloudDocumentSize(body.data) > MAX_CLOUD_DOCUMENT_BYTES ? 'project-too-large' : null;
+}
+export const { useGetProjectsQuery, useLazyGetProjectQuery } = projectsApi;

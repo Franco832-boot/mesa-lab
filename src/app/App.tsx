@@ -40,8 +40,13 @@ import { componentScreenBounds } from '../features/components/inspectorPlacement
 import { CodeExportDialog } from '../features/codeExport/CodeExportDialog';
 import { AccountControls } from '../features/auth/AccountControls';
 import { CloudProjectsPanel } from '../features/cloudProjects/CloudProjectsPanel';
+import { useAppDispatch, useAppSelector } from './hooks';
+import { cloudLinkDetached, cloudLinkInstalled } from '../features/project/projectSlice';
+import { projectFingerprint } from '../features/cloudProjects/saveMetadata';
+import type { ProjectSync } from '../features/cloudProjects/projectSync';
+import { apiErrorCode, apiErrorMessage } from '../services/api/errors';
 
-export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
+export function App({ saveProject }: { saveProject: ProjectSync['save'] }) {
   const { t, locale, setLocale } = useLocale();
   const {
     project,
@@ -57,6 +62,17 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
     load,
     reset,
   } = useProject();
+  const dispatch = useAppDispatch();
+  const { cloudLinks, cloudStatus } = useAppSelector(state => state.project);
+  const user = useAppSelector(state => state.auth.user);
+  const cloudLink = cloudLinks.find(link => link.documentId === project.id);
+  const cloudDirty = Boolean(cloudLink && (cloudLink.pending || cloudLink.savedFingerprint !== projectFingerprint(project)));
+  const remotePhase = cloudStatus?.documentId === project.id ? cloudStatus.phase : null;
+  const cloudMessage: TranslationKey = remotePhase === 'conflict' ? 'cloudConflict'
+    : remotePhase === 'error' ? 'cloudSyncError' : remotePhase === 'saving' ? 'cloudSaving'
+      : cloudLink && cloudDirty ? 'cloudPending' : cloudLink?.remote ? 'cloudSaved' : saved ? 'localSaved' : 'localSaving';
+  const displaySaved = saved && !cloudDirty && remotePhase === null;
+  const displayError = saveStatus === 'error' || remotePhase === 'error' || remotePhase === 'conflict';
   const tools = useWorkspacePanels();
   useVisualViewport();
   const libraryOpen = tools.open;
@@ -283,6 +299,7 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
       const source = await file.text();
       if (lockedRef.current) return;
       const next = replaceWorkspace(source, { fit: false, serial: false });
+      dispatch(cloudLinkDetached(next.id));
       routes.adoptLocal(next);
       setNotice('importSuccess');
     } catch {
@@ -413,11 +430,11 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
             />
           </div>
           <div className="project-status-row">
-            <span className="local-badge">{t('localProject')}</span>
-            <div className={`save-state ${saved ? 'is-saved' : ''} ${saveStatus === 'error' ? 'is-error' : ''}`}
+            <span className="local-badge">{t(cloudLink?.remote ? 'cloudProject' : 'localProject')}</span>
+            <div className={`save-state ${displaySaved ? 'is-saved' : ''} ${displayError ? 'is-error' : ''}`}
               id="project-save-status" role="status" aria-live="polite" aria-atomic="true">
-              <Icon name={saveStatus === 'error' ? 'info' : saved ? 'check' : 'save'} size={14} />
-              <span>{t(saveStatus === 'error' ? 'saveErrorShort' : saved ? 'localSaved' : 'localSaving')}</span>
+              <Icon name={displayError ? 'info' : displaySaved ? 'check' : 'save'} size={14} />
+              <span>{t(saveStatus === 'error' ? 'saveErrorShort' : cloudMessage)}</span>
             </div>
           </div>
         </div>
@@ -435,10 +452,11 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           <button
             className="save-button"
             aria-label={t('save')}
-            title={t('saveLocalHint')}
+            title={t(user || cloudLink ? 'saveCloudHint' : 'saveLocalHint')}
             aria-describedby="project-save-status"
             onClick={() => {
-              void saveNow().then((success) => setNotice(success ? 'saveSuccess' : 'saveError'));
+              void saveProject(t('untitledProject')).then(result => setNotice(result === 'local' ? 'saveSuccess'
+                : result === 'cloud' ? 'cloudSaveSuccess' : result === 'pending' ? 'cloudPending' : null));
             }}
           >
             <Icon name="save" size={16} />
@@ -686,9 +704,12 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={(id) => routes.navigate(examplePaths[id])}
             onCreate={() => routes.navigate('/new')} onOpenCopy={(key, name) => routes.navigate(localProjectPath(name, key))}
             copies={projectCopies.copies} copiesError={projectCopies.error} activeName={project.name}
-            cloudProjects={<CloudProjectsPanel locked={locked} onOpen={source => {
+            cloudProjects={<CloudProjectsPanel locked={locked} onOpen={(source, remote) => {
               if (lockedRef.current) throw new Error('workspace-locked');
               const next = replaceWorkspace(source, { fit: false, serial: false });
+              dispatch(cloudLinkInstalled({ documentId: next.id,
+                remote: { id: remote.id, userId: remote.userId, version: remote.version },
+                savedFingerprint: projectFingerprint(next), pending: null }));
               routes.adoptLocal(next);
               setNotice('savedProjectOpened');
             }} />} />
@@ -847,6 +868,10 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
         </label>
       </footer>
       <div className="toast-region" role="status" aria-live="polite">
+        {cloudStatus && cloudStatus.documentId === project.id && cloudStatus.phase !== 'saving' && <div className="toast" role="alert">
+          <Icon name="info" size={18} /><span>{t(apiErrorMessage(cloudStatus.error))}
+            {apiErrorCode(cloudStatus.error) && <> ({apiErrorCode(cloudStatus.error)})</>}</span>
+        </div>}
         {notice && (
           <div className="toast">
             <Icon name={notice.endsWith('Error') ? 'info' : 'check'} size={18} />

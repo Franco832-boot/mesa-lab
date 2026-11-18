@@ -4,9 +4,13 @@ import { createProject } from '../../model/project';
 import type { CircuitProject, Viewport } from '../../model/types';
 import { applyEditorCommand, editorSnapshot } from '../../model/editor';
 import type { EditorCommand, EditorSnapshot } from '../../model/editor';
+import type { CloudProjectLink, CloudSaveStatus, PendingProjectSave, RemoteProjectIdentity } from '../cloudProjects/saveMetadata';
+import { sessionEnded } from '../auth/authSlice';
 
 export interface ProjectState {
   document: CircuitProject;
+  cloudLinks: CloudProjectLink[];
+  cloudStatus: CloudSaveStatus;
   saveStatus: 'saving' | 'saved' | 'error';
   restoreIssue: boolean;
   restored: boolean;
@@ -14,6 +18,8 @@ export interface ProjectState {
 }
 const initialState: ProjectState = {
   document: createProject('initial-project'),
+  cloudLinks: [],
+  cloudStatus: null,
   saveStatus: 'saving',
   restoreIssue: false,
   restored: false,
@@ -33,9 +39,40 @@ const slice = createSlice({
     },
     projectReplaced(state, action: PayloadAction<CircuitProject>) {
       state.document = action.payload;
+      state.cloudStatus = null;
       state.saveStatus = 'saving';
       state.restoreIssue = false;
       state.history = { past: [], future: [] };
+    },
+    cloudLinkInstalled(state, action: PayloadAction<CloudProjectLink>) {
+      state.cloudLinks = state.cloudLinks.filter(link => link.documentId !== action.payload.documentId);
+      state.cloudLinks.push(action.payload);
+      state.cloudStatus = null;
+      state.saveStatus = 'saving';
+    },
+    cloudLinkDetached(state, action: PayloadAction<string>) {
+      state.cloudLinks = state.cloudLinks.filter(link => link.documentId !== action.payload);
+      state.cloudStatus = null;
+      state.saveStatus = 'saving';
+    },
+    cloudSavePrepared(state, action: PayloadAction<{ documentId: string; pending: PendingProjectSave }>) {
+      const link = state.cloudLinks.find(item => item.documentId === action.payload.documentId);
+      if (link) link.pending = action.payload.pending;
+      else state.cloudLinks.push({ documentId: action.payload.documentId, remote: null, savedFingerprint: null, pending: action.payload.pending });
+      state.saveStatus = 'saving';
+    },
+    cloudSaveCommitted(state, action: PayloadAction<{ documentId: string; key: string; remote: RemoteProjectIdentity; fingerprint: string }>) {
+      const link = state.cloudLinks.find(item => item.documentId === action.payload.documentId);
+      if (!link || link.pending?.key !== action.payload.key) return;
+      link.remote = action.payload.remote;
+      link.savedFingerprint = action.payload.fingerprint;
+      link.pending = null;
+      state.saveStatus = 'saving';
+      if (state.cloudStatus?.documentId === action.payload.documentId) state.cloudStatus = null;
+    },
+    cloudStatusChanged(state, action: PayloadAction<CloudSaveStatus>) {
+      // A late result can only update its own active document's presentation.
+      if (action.payload === null || action.payload.documentId === state.document.id) state.cloudStatus = action.payload;
     },
     editorCommandApplied(state, action: PayloadAction<EditorCommand>) {
       const next = applyEditorCommand(state.document, action.payload);
@@ -77,11 +114,17 @@ const slice = createSlice({
       state.restored = true;
     },
   },
+  extraReducers: builder => { builder.addCase(sessionEnded, state => { state.cloudStatus = null; }); },
 });
 export const {
   nameChanged,
   viewportChanged,
   projectReplaced,
+  cloudLinkInstalled,
+  cloudLinkDetached,
+  cloudSavePrepared,
+  cloudSaveCommitted,
+  cloudStatusChanged,
   checkpointRequested,
   persistenceSucceeded,
   persistenceFailed,

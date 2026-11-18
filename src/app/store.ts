@@ -27,6 +27,7 @@ import {
 import type { ProjectState } from '../features/project/projectSlice';
 import { decodePersistedProject, PERSIST_KEY, PERSIST_VERSION, RECOVERY_KEY } from './persistence';
 import type { ProjectStorage, PersistedProject } from './persistence';
+import { createProjectSync } from '../features/cloudProjects/projectSync';
 
 export function createAppStore(storage: ProjectStorage) {
   const runtime = new ApiRuntime();
@@ -44,7 +45,7 @@ export function createAppStore(storage: ProjectStorage) {
   const config: PersistConfig<ProjectState> = {
     key: 'mesa.project',
     version: PERSIST_VERSION,
-    whitelist: ['document'],
+    whitelist: ['document', 'cloudLinks'],
     throttle: 150,
     storage: {
       getItem: async (key: string) => storage.getItem(key),
@@ -83,7 +84,7 @@ export function createAppStore(storage: ProjectStorage) {
           const document = parseProject(legacy);
           store.dispatch(projectRestored());
           unsafeSource = null;
-          return { document, _persist: { version: PERSIST_VERSION, rehydrated: false } };
+          return { document, cloudLinks: [], _persist: { version: PERSIST_VERSION, rehydrated: false } };
         }
         return undefined;
       } catch {
@@ -125,7 +126,19 @@ export function createAppStore(storage: ProjectStorage) {
     await persistor.flush();
     return !writeFailed;
   };
-  return { store, persistor, saveNow };
+  const projectSync = createProjectSync(store, saveNow);
+  // Lifecycle events cannot wait for an async Redux Persist flush or the network.
+  const backupNow = (): boolean => {
+    if (writesBlocked) return false;
+    const state = store.getState().project;
+    if (!state._persist.rehydrated) return false;
+    try {
+      storage.setItem(PERSIST_KEY, JSON.stringify({ document: JSON.stringify(state.document),
+        cloudLinks: JSON.stringify(state.cloudLinks), _persist: JSON.stringify({ version: PERSIST_VERSION, rehydrated: true }) }));
+      return true;
+    } catch { return false; }
+  };
+  return { store, persistor, saveNow, projectSync, backupNow };
 }
 export type AppStore = ReturnType<typeof createAppStore>['store'];
 export type RootState = ReturnType<AppStore['getState']>;

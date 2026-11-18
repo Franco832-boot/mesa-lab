@@ -5,14 +5,22 @@ import { useAppSelector } from '../../app/hooks';
 import { Dialog } from '../../shared/Dialog';
 import { Icon } from '../../shared/Icon';
 import { useGetProjectsQuery, useLazyGetProjectQuery } from '../../services/api/projectsApi';
-import { apiErrorMessage } from '../../services/api/errors';
+import { apiErrorCode, apiErrorMessage } from '../../services/api/errors';
 import { CloudDocumentError, readCloudProject } from './document';
 import { serializeProject } from '../../model/project';
 import { useSessionGuard } from '../auth/useSessionGuard';
+import type { ProjectResponse } from '../../services/api/contracts';
 
-function SignedInProjects({ onOpen, locked }: { onOpen: (source: string) => void; locked: boolean }) {
+type OpenProject = (source: string, remote: ProjectResponse) => void;
+function ErrorText({ error }: { error: unknown }) {
+  const { t } = useLocale();
+  const code = apiErrorCode(error);
+  return <span>{t(apiErrorMessage(error))}{code && <> <small>({code})</small></>}</span>;
+}
+
+function SignedInProjects({ onOpen, locked }: { onOpen: OpenProject; locked: boolean }) {
   const { t, locale } = useLocale();
-  const projects = useGetProjectsQuery();
+  const projects = useGetProjectsQuery(undefined, { refetchOnMountOrArgChange: true });
   const [fetchProject, remote] = useLazyGetProjectQuery();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<TranslationKey | null>(null);
@@ -21,8 +29,8 @@ function SignedInProjects({ onOpen, locked }: { onOpen: (source: string) => void
   const open = () => {
     if (!currentSession() || locked || !pending || remote.currentData?.id !== pending) return;
     try {
-      const document = readCloudProject(remote.currentData);
-      onOpen(serializeProject(document));
+      const document = { ...readCloudProject(remote.currentData), id: remote.currentData.id, name: remote.currentData.name };
+      onOpen(serializeProject(document), remote.currentData);
       setPending(null); setError(null);
     } catch (failure: unknown) { setError(failure instanceof CloudDocumentError ? 'cloudInvalidDocument' : 'cloudOpenError'); }
   };
@@ -36,7 +44,7 @@ function SignedInProjects({ onOpen, locked }: { onOpen: (source: string) => void
     </div>
     {projects.isFetching && <p className="cloud-feedback" role="status">{t('apiLoading')}</p>}
     {projects.isFetching && !projects.data && <div className="cloud-skeleton" aria-hidden="true"><span /><span /><span /></div>}
-    {projects.isError && <p className="cloud-feedback is-error" role="alert"><Icon name="info" size={18} />{t(apiErrorMessage(projects.error))}</p>}
+    {projects.isError && <p className="cloud-feedback is-error" role="alert"><Icon name="info" size={18} /><ErrorText error={projects.error} /></p>}
     {!projects.isFetching && !projects.isError && projects.data?.length === 0 && <p className="cloud-feedback is-empty"><Icon name="folder" size={22} />{t('cloudEmpty')}</p>}
     <ul className="cloud-project-list" aria-busy={projects.isFetching}>{projects.data?.map(project => <li key={project.id} className="cloud-project-card">
       <div className="cloud-project-card-heading"><span className="cloud-project-icon"><Icon name="folder" size={18} /></span><strong>{project.name}</strong></div>
@@ -51,14 +59,14 @@ function SignedInProjects({ onOpen, locked }: { onOpen: (source: string) => void
     {pending && <Dialog title={t('cloudOpen')} onClose={() => { setPending(null); remote.reset(); }} className="account-dialog">
       <p>{t('cloudOpenNotice')}</p>
       {remote.isFetching && <p role="status">{t('apiLoading')}</p>}
-      {remote.isError && <p role="alert">{t(apiErrorMessage(remote.error))}</p>}
+      {remote.isError && <p role="alert"><ErrorText error={remote.error} /></p>}
       {error !== null && <p role="alert">{t(error)}</p>}
       <div className="dialog-actions"><button className="secondary-button" onClick={() => { setPending(null); remote.reset(); }}>{t('cancel')}</button>
         <button className="primary-button" disabled={locked || remote.isFetching || remote.isError || remote.currentData?.id !== pending} onClick={open}>{t('cloudOpen')}</button></div>
     </Dialog>}
   </>;
 }
-export function CloudProjectsPanel({ onOpen, locked }: { onOpen: (source: string) => void; locked: boolean }) {
+export function CloudProjectsPanel({ onOpen, locked }: { onOpen: OpenProject; locked: boolean }) {
   const { t } = useLocale();
   const { user, epoch } = useAppSelector(state => state.auth);
   return <section className="cloud-projects" data-testid="cloud-projects" aria-labelledby="cloud-projects-title">

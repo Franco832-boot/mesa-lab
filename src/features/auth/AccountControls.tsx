@@ -48,7 +48,8 @@ function AuthForm({ mode, onClose }: { mode: AuthMode; onClose: () => void }) {
         required minLength={12} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} disabled={pending} /></label>
       <small id="auth-password-hint">{t('authPasswordHint')}</small>
       {error !== null && <p role="alert">{t(typeof error === 'object' && error !== null && 'status' in error && error.status === 401
-        ? 'authInvalidCredentials' : apiErrorMessage(error))}</p>}
+        ? 'authInvalidCredentials' : typeof error === 'object' && error !== null && 'status' in error && error.status === 409
+          ? 'authEmailConflict' : apiErrorMessage(error))}</p>}
       <div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>{t('cancel')}</button>
         <button className="primary-button" type="submit" disabled={pending}>{t(pending ? 'apiLoading' : mode === 'login' ? 'authLogin' : 'authRegister')}</button>
       </div>
