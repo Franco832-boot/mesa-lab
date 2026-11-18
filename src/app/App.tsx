@@ -38,6 +38,9 @@ import { statusMessages } from '../features/simulation/messages';
 import { SimulationConsole } from '../features/simulation/SimulationConsole';
 import { componentScreenBounds } from '../features/components/inspectorPlacement';
 import { CodeExportDialog } from '../features/codeExport/CodeExportDialog';
+import { AccountControls } from '../features/auth/AccountControls';
+import { CloudSaveButton } from '../features/cloudProjects/CloudSaveButton';
+import { CloudProjectsPanel } from '../features/cloudProjects/CloudProjectsPanel';
 
 export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
   const { t, locale, setLocale } = useLocale();
@@ -417,6 +420,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           </div>
         </div>
         <div className="header-actions">
+          <AccountControls />
+          <CloudSaveButton project={project} />
           <button
             className="icon-button help-button"
             aria-label={t('help')}
@@ -677,7 +682,13 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           <div className="workspace-area">
           <ProjectLibrary open={projectsOpen} onClose={closeProjects} canvasRef={stageRef} canvasVersion={`${project.id}-${revision}`} onOpen={(id) => routes.navigate(examplePaths[id])}
             onCreate={() => routes.navigate('/new')} onOpenCopy={(key, name) => routes.navigate(localProjectPath(name, key))}
-            copies={projectCopies.copies} copiesError={projectCopies.error} activeName={project.name} />
+            copies={projectCopies.copies} copiesError={projectCopies.error} activeName={project.name}
+            cloudProjects={<CloudProjectsPanel locked={locked} onOpen={source => {
+              if (lockedRef.current) throw new Error('workspace-locked');
+              const next = replaceWorkspace(source, { fit: false, serial: false });
+              routes.adoptLocal(next);
+              setNotice('savedProjectOpened');
+            }} />} />
           <Workspace
             key={`${project.id}-${revision}`}
             {...(!tools.compact ? { inspector: renderInspector } : {})}

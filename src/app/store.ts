@@ -1,4 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit';
+import type { Middleware } from '@reduxjs/toolkit';
+import { baseApi } from '../services/api/baseApi';
+import { ApiRuntime } from '../services/api/runtime';
+import { authReducer, sessionEnded } from '../features/auth/authSlice';
 import {
   FLUSH,
   PAUSE,
@@ -25,6 +29,15 @@ import { decodePersistedProject, PERSIST_KEY, PERSIST_VERSION, RECOVERY_KEY } fr
 import type { ProjectStorage, PersistedProject } from './persistence';
 
 export function createAppStore(storage: ProjectStorage) {
+  const runtime = new ApiRuntime();
+  const sessionMiddleware: Middleware = (api) => (next) => (action) => {
+    if (sessionEnded.match(action)) runtime.clear();
+    const result = next(action);
+    if (sessionEnded.match(action)) {
+      api.dispatch(baseApi.util.resetApiState());
+    }
+    return result;
+  };
   let writeFailed = false;
   let unsafeSource: string | null = null;
   let writesBlocked = false;
@@ -87,12 +100,15 @@ export function createAppStore(storage: ProjectStorage) {
     },
   };
   const store = configureStore({
-    reducer: { project: persistReducer<ProjectState>(config, projectReducer) },
+    reducer: { project: persistReducer<ProjectState>(config, projectReducer), auth: authReducer, [baseApi.reducerPath]: baseApi.reducer },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
+        thunk: { extraArgument: runtime },
         serializableCheck: { ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER] },
-      }),
+      }).concat(sessionMiddleware, baseApi.middleware),
+    devTools: import.meta.env.DEV,
   });
+  runtime.onExpired = () => { store.dispatch(sessionEnded('expired')); };
   store.dispatch(projectReplaced(createProject()));
   const persistor = persistStore(store);
   const saveNow = async (): Promise<boolean> => {

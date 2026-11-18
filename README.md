@@ -2,6 +2,8 @@
 
 A browser circuit editor built with React, strict TypeScript, Vite, Redux Toolkit and Redux Persist. The central circuit stays visible while the right sidebar provides Components, per-board Code and virtual ESP8266 IoT tools. Electrical simulation and virtual HTTP run locally without a backend. Browser and screenshot acceptance remain pending; see [workspace implementation and validation](docs/WORKSPACE_AND_IOT.md).
 
+Optional accounts connect to the existing NestJS API through modular RTK Query endpoints. Save remains local; authenticated users can explicitly save cloud copies and open them after a local backup. Tokens stay in memory, and local projects remain available without signing in. See [contracts, security, duplicate prevention and actual validation limits](docs/API_INTEGRATION.md). No automatic synchronization, backend changes or production writes are part of the implementation verification.
+
 ## Start
 
 Requires Node.js 22.12 or later. `.nvmrc` selects Node 22.

@@ -9,8 +9,9 @@ import type { ExampleId } from '../../model/exampleProjects';
 import { catalog } from '../components/catalog';
 import { ContactCard } from '../contact/ContactCard';
 import type { ProjectCopy } from './replacement';
+import type { ReactNode } from 'react';
 
-export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen, onCreate, onOpenCopy, copies, copiesError, activeName }: {
+export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen, onCreate, onOpenCopy, copies, copiesError, activeName, cloudProjects }: {
   open: boolean; onClose: () => void; canvasRef: RefObject<HTMLDivElement | null>;
   onOpen: (id: ExampleId) => void;
   canvasVersion: string;
@@ -19,6 +20,7 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
   copies: readonly ProjectCopy[];
   copiesError: boolean;
   activeName: string;
+  cloudProjects?: ReactNode;
 }) {
   const { t } = useLocale();
   const [width, setWidth] = useState(280);
@@ -35,6 +37,7 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
     </>}>
     <div className="tool-sidebar-content project-library-content">
       <article className="project-card project-start-card" data-testid="create-project-card" aria-labelledby="create-project-title">
+        <h3>{t('localProjectsTitle')}</h3>
         <h3 id="create-project-title">{t('createNewProjectTitle')}</h3>
         <p>{t('createNewProjectDescription')}</p>
         <a href="/new" className="secondary-button" data-testid="create-project" onClick={(event) => follow(event, onCreate)}><Icon name="plus" size={14} />{t('createProject')}</a>
@@ -54,6 +57,7 @@ export function ProjectLibrary({ open, onClose, canvasRef, canvasVersion, onOpen
         </details>
         {copiesError && <p role="alert">{t('projectCopiesError')}</p>}
       </article>
+      {cloudProjects}
       <p className="project-library-intro">{t('exampleProjectsIntro')}</p>
       {availableExampleCategories.map((category) => <section key={category} aria-labelledby={`examples-${category}`}>
         <h3 id={`examples-${category}`} className="project-category">{t(exampleCategoryLabels[category])}</h3>
