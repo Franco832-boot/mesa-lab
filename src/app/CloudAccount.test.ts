@@ -45,7 +45,7 @@ beforeEach(() => {
     }
     expect(request.headers.get('authorization')).toBe(`Bearer ${token}`);
     if (path === '/auth/me') return json(user);
-    if (path === '/tasks') return json([]);
+    if (path === '/tasks') throw new Error('The project interface must not request tasks');
     if (path === '/projects' && request.method === 'GET') return json(projects);
     if (path === '/projects' && request.method === 'POST') {
       const body: unknown = await request.json();
@@ -111,7 +111,8 @@ async function settled(check: () => void) {
   throw failure;
 }
 async function authenticate(mode = 'Sign in') {
-  await click(button(mode));
+  await click(element('.account-trigger'));
+  await click(button(mode, element('[role=menu]')));
   await fill('input[name=email]', user.email); await fill('input[name=password]', password);
   await submit();
   await settled(() => { expect(app?.store.getState().auth.user).toEqual(user); });
@@ -125,12 +126,17 @@ describe('account and cloud UI with the existing application store', () => {
     localStorage.setItem('mesa.locale', labels.locale);
     const legacy = localStorage.getItem(STORAGE_KEY);
     const current = await mount(); const document = current.store.getState().project.document;
-    expect(button(labels.register)).toBeDefined(); expect(button(labels.login)).toBeDefined();
+    expect(button(labels.login)).toBeDefined();
+    await click(element('.account-trigger'));
+    expect(button(labels.register, element('[role=menu]'))).toBeDefined();
+    await click(element('.account-trigger'));
     expect(requests).toEqual([]);
     await authenticate(labels.register);
-    expect(element('[data-testid=account-controls]').textContent).toContain(user.email);
+    expect(container.querySelector('[role=menu]')).toBeNull();
+    await click(element('.account-trigger'));
+    expect(element('[role=menu]').textContent).toContain(user.email);
     expect(requests).toContain('POST /auth/register'); expect(requests).toContain('GET /auth/me');
-    await click(button(labels.logout));
+    await click(button(labels.logout, element('[role=menu]')));
     expect(current.store.getState().auth.user).toBeNull();
     expect(current.store.getState().api.queries).toEqual({});
     expect(current.store.getState().project.document).toBe(document);
@@ -142,38 +148,42 @@ describe('account and cloud UI with the existing application store', () => {
   it('shows credential errors without establishing a session or changing the local project', async () => {
     const current = await mount(); const document = current.store.getState().project.document;
     vi.stubGlobal('fetch', vi.fn(async () => json({ statusCode: 401, message: 'Email o contraseña incorrectos', timestamp: user.createdAt }, 401)));
-    await click(button('Sign in')); await fill('input[name=email]', user.email); await fill('input[name=password]', password); await submit();
+    await click(element('.account-trigger')); await click(button('Sign in', element('[role=menu]'))); await fill('input[name=email]', user.email); await fill('input[name=password]', password); await submit();
     await settled(() => { expect(element('dialog [role=alert]').textContent).toBe('Incorrect email or password.'); });
     expect(current.store.getState().auth.user).toBeNull(); expect(current.store.getState().project.document).toBe(document);
     expect(element('input[name=password]')).toHaveProperty('value', '');
   });
-  it('saves explicitly, keeps local save separate, and refuses duplicate submit events', async () => {
-    const current = await mount(); await authenticate();
-    await click(button('Save')); expect(writes).toBe(0);
-    const document = current.store.getState().project.document;
-    await click(button('Save a cloud copy'));
-    await act(async () => {
-      const form = element('dialog form');
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    });
-    await settled(() => { expect(element('dialog [role=status]').textContent).toContain('Copy available in the cloud'); });
-    expect(writes).toBe(1); expect(current.store.getState().project.document).toBe(document);
+  it.each([false, true])('keeps one visible Save action and saves only locally (signed in: %s)', async signedIn => {
+    const current = await mount();
+    if (signedIn) await authenticate();
+    await act(async () => { current.store.dispatch(nameChanged('Local draft')); });
+    const header = element('.app-header');
+    expect(header.querySelectorAll('.save-button')).toHaveLength(1);
+    expect(header.textContent).not.toContain('Save a cloud copy');
+    expect(container.textContent).not.toContain('My tasks');
+    await click(button('Save'));
+    await settled(() => { expect(element('#project-save-status').textContent).toContain('Saved locally'); });
+    expect(localStorage.getItem('persist:mesa.project')).toContain('Local draft');
+    expect(writes).toBe(0);
+    expect(requests).not.toContain('GET /tasks');
+    expect(requests.some(request => /^(POST|PATCH) \/projects/.test(request))).toBe(false);
+    expect(current.store.getState().project.document.name).toBe('Local draft');
   });
   it('opens only after confirmation and preserves an immutable local backup', async () => {
     // A literal portable document is independent of the project parser and API implementation.
     projects = [remote({ format: 'mesa-circuit', version: 1, id: 'downloaded-id', name: 'Downloaded local copy',
       components: [], wires: [], programs: [], viewport: { zoom: 1, offset: { x: 0, y: 0 } } })];
     const current = await mount(); await authenticate();
-    await click(button('Open as a local copy'));
+    await click(button('Open project'));
     expect(current.store.getState().project.document.name).toBe('Existing local project');
-    await settled(() => { expect(button('Open as a local copy', element('dialog'))).toHaveProperty('disabled', false); });
-    await click(button('Open as a local copy', element('dialog')));
+    await settled(() => { expect(button('Open project', element('dialog'))).toHaveProperty('disabled', false); });
+    await click(button('Open project', element('dialog')));
     expect(current.store.getState().project.document.name).toBe('Downloaded local copy');
     const backups = Object.keys(localStorage).filter(key => key.startsWith(EXAMPLE_BACKUP_PREFIX));
     expect(backups).toHaveLength(1);
     expect(localStorage.getItem(backups[0] ?? '')).toContain('Existing local project');
-    await click(button('Sign out'));
+    await click(element('.account-trigger'));
+    await click(button('Sign out', element('[role=menu]')));
     expect(element('[data-testid=cloud-projects]').textContent).not.toContain('Remote private copy');
     expect(current.store.getState().project.document.name).toBe('Downloaded local copy');
   });
@@ -189,28 +199,68 @@ describe('account and cloud UI with the existing application store', () => {
         set.call(this, key, value);
       });
     }
-    await click(button('Open as a local copy'));
-    await settled(() => { expect(button('Open as a local copy', element('dialog'))).toHaveProperty('disabled', false); });
-    await click(button('Open as a local copy', element('dialog')));
+    await click(button('Open project'));
+    await settled(() => { expect(button('Open project', element('dialog'))).toHaveProperty('disabled', false); });
+    await click(button('Open project', element('dialog')));
     expect(element('dialog [role=alert]')).toBeDefined();
     expect(current.store.getState().project.document).toBe(document);
     expect(Object.keys(localStorage).filter(key => key.startsWith(EXAMPLE_BACKUP_PREFIX))).toEqual([]);
   });
-  it('reports the cloud size limit while keeping the entire large project locally', async () => {
+  it('keeps large projects fully usable through the local Save action', async () => {
     const project = createProject('large-local');
     project.programs = [{ componentId: 'uno-reference', language: 'arduino-cpp', execution: 'unavailable', source: '//' + 'x'.repeat(270000) }];
     localStorage.setItem(STORAGE_KEY, serializeProject(project));
     const current = await mount(); await authenticate();
-    await click(button('Save a cloud copy'));
-    expect(element('dialog [role=alert]').textContent).toContain('limited to 256 KiB');
-    expect(button('Save a cloud copy', element('dialog'))).toHaveProperty('disabled', true);
-    expect(writes).toBe(0); expect(current.store.getState().project.document.programs[0]?.source.length).toBe(270002);
+    await click(button('Save'));
+    await settled(() => { expect(element('#project-save-status').textContent).toContain('Saved locally'); });
+    expect(writes).toBe(0);
+    expect(current.store.getState().project.document.programs[0]?.source.length).toBe(270002);
+    expect(localStorage.getItem('persist:mesa.project')).toContain('x'.repeat(270000));
+  });
+  it('supports menu keyboard navigation, Escape focus restoration, and outside dismissal', async () => {
+    await mount();
+    const trigger = element('.account-trigger');
+    await click(trigger);
+    const login = button('Sign in', element('[role=menu]'));
+    const register = button('Sign up', element('[role=menu]'));
+    expect(document.activeElement).toBe(login);
+    await act(async () => { login.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); });
+    expect(document.activeElement).toBe(register);
+    await act(async () => { register.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })); });
+    expect(document.activeElement).toBe(login);
+    await act(async () => { login.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+    await click(trigger);
+    await act(async () => { document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })); });
+    expect(container.querySelector('[role=menu]')).toBeNull();
+  });
+  it.each(['en', 'es'])('shows project cards and modification dates in %s without requesting tasks', async locale => {
+    localStorage.setItem('mesa.locale', locale);
+    projects = [remote({})];
+    await mount(); await authenticate(locale === 'en' ? 'Sign in' : 'Ingresar');
+    await settled(() => { expect(container.querySelectorAll('.cloud-project-card')).toHaveLength(1); });
+    expect(element('.cloud-project-card strong').textContent).toBe('Remote private copy');
+    expect(element('.cloud-project-date time').getAttribute('datetime')).toBe(user.createdAt);
+    expect(element('.cloud-open-button').textContent).toContain(locale === 'en' ? 'Open project' : 'Abrir proyecto');
+    expect(requests).not.toContain('GET /tasks');
+  });
+  it('shows a recoverable cloud error while preserving the document and local Save', async () => {
+    const current = await mount();
+    await authenticate();
+    const before = serializeProject(current.store.getState().project.document);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Offline'); }));
+    await click(button('Refresh'));
+    await settled(() => { expect(element('.cloud-feedback[role=alert]').textContent).toContain('Could not connect'); });
+    await click(button('Save'));
+    expect(serializeProject(current.store.getState().project.document)).toBe(before);
+    expect(writes).toBe(0);
   });
   it('does not accept a cancelled form response after it has been closed', async () => {
     const current = await mount();
     let finish: ((response: Response) => void) | undefined;
     vi.stubGlobal('fetch', vi.fn(async () => new Promise<Response>(resolve => { finish = resolve; })));
-    await click(button('Sign in')); await fill('input[name=email]', user.email); await fill('input[name=password]', password); await submit();
+    await click(element('.account-trigger')); await click(button('Sign in', element('[role=menu]'))); await fill('input[name=email]', user.email); await fill('input[name=password]', password); await submit();
     await click(button('Cancel', element('dialog')));
     await act(async () => { finish?.(json({ accessToken: token, tokenType: 'Bearer', expiresIn: 900, user })); });
     expect(current.store.getState().auth.user).toBeNull();

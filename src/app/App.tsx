@@ -39,7 +39,6 @@ import { SimulationConsole } from '../features/simulation/SimulationConsole';
 import { componentScreenBounds } from '../features/components/inspectorPlacement';
 import { CodeExportDialog } from '../features/codeExport/CodeExportDialog';
 import { AccountControls } from '../features/auth/AccountControls';
-import { CloudSaveButton } from '../features/cloudProjects/CloudSaveButton';
 import { CloudProjectsPanel } from '../features/cloudProjects/CloudProjectsPanel';
 
 export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
@@ -412,16 +411,18 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
               maxLength={100}
               onChange={(event) => updateName(event.target.value)}
             />
-            <span className="local-badge">{t('localProject')}</span>
           </div>
-          <div className={`save-state ${saved ? 'is-saved' : ''}`}>
-            <Icon name={saved ? 'check' : 'folder'} size={12} />
-            <span>{t(saveStatus === 'error' ? 'saveErrorShort' : saved ? 'saved' : 'saving')}</span>
+          <div className="project-status-row">
+            <span className="local-badge">{t('localProject')}</span>
+            <div className={`save-state ${saved ? 'is-saved' : ''} ${saveStatus === 'error' ? 'is-error' : ''}`}
+              id="project-save-status" role="status" aria-live="polite" aria-atomic="true">
+              <Icon name={saveStatus === 'error' ? 'info' : saved ? 'check' : 'save'} size={14} />
+              <span>{t(saveStatus === 'error' ? 'saveErrorShort' : saved ? 'localSaved' : 'localSaving')}</span>
+            </div>
           </div>
         </div>
         <div className="header-actions">
           <AccountControls />
-          <CloudSaveButton project={project} />
           <button
             className="icon-button help-button"
             aria-label={t('help')}
@@ -434,6 +435,8 @@ export function App({ saveNow }: { saveNow: () => Promise<boolean> }) {
           <button
             className="save-button"
             aria-label={t('save')}
+            title={t('saveLocalHint')}
+            aria-describedby="project-save-status"
             onClick={() => {
               void saveNow().then((success) => setNotice(success ? 'saveSuccess' : 'saveError'));
             }}
