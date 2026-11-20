@@ -24,6 +24,8 @@ export const en = {
   accountSignedIn: "Signed in",
   accountMenu: "Account",
   authLogin: 'Sign in',
+  authServerNoticeTitle: 'The server may take a while to respond',
+  authServerNoticeBody: 'We use a free server that may go to sleep when inactive. Your first sign-in may take a while as it wakes up. If an error occurs, wait a few seconds and try again.',
   authRegister: 'Sign up',
   authLogout: 'Sign out',
   authEmail: 'Email',

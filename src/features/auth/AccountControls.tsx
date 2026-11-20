@@ -53,6 +53,13 @@ function AuthForm({ mode, onClose }: { mode: AuthMode; onClose: () => void }) {
       <div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>{t('cancel')}</button>
         <button className="primary-button" type="submit" disabled={pending}>{t(pending ? 'apiLoading' : mode === 'login' ? 'authLogin' : 'authRegister')}</button>
       </div>
+      {(['login', 'register'] as string[]).includes(mode)  && <aside className="info-callout account-server-notice" aria-labelledby="auth-server-notice-title">
+        <Icon name="info" size={17} />
+        <div>
+          <strong id="auth-server-notice-title">{t('authServerNoticeTitle')}</strong>
+          <p>{t('authServerNoticeBody')}</p>
+        </div>
+      </aside>}
     </form>
   </Dialog>;
 }
