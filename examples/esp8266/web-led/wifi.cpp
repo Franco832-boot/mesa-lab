@@ -1,7 +1,7 @@
 #include <ESP8266WiFi.h>
 #include "wifi.h"
 
-// Fictional credentials for the network built into Mesa Lab. No real radio is used.
+// Fictional credentials for the network built into Los Profes Para Vos. No real radio is used.
 const char* ssid = "MiCasa";
 const char* password = "carlos";
 const unsigned long WIFI_TIMEOUT_MS = 5000UL;

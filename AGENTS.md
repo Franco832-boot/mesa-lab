@@ -1,4 +1,4 @@
-# Mesa Lab engineering standards
+# Los Profes Para Vos engineering standards
 
 These rules apply throughout this repository.
 

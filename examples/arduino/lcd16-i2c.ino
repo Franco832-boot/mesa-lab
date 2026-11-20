@@ -9,9 +9,9 @@ void setup() {
   Wire.begin();
   lcd.init();
   lcd.backlight();
-  lcd.print("LosProfesParaVos");
+  lcd.print("Los Profes");
   lcd.setCursor(0, 1);
-  lcd.print("LCD 16x2 I2C");
+  lcd.print("Para Vos");
 }
 
 void loop() {

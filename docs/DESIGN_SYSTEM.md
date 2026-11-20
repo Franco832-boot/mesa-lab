@@ -1,4 +1,4 @@
-# Mesa Lab design system
+# Los Profes Para Vos design system
 
 This records the existing visual identity; Phase 3 extends it without redesigning the editor. `src/app/styles.css` remains authoritative.
 

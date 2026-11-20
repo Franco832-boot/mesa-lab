@@ -127,7 +127,7 @@ The five native-browser LCD cases are authored and syntax-checked, but not execu
 
 ## Manual verification
 
-1. Open **Projects → Displays**, choose any of the four templates, and Start. The first line should show `Mesa Lab`; 20×4 examples also use the fourth line. Open Code to inspect the loaded source and the LCD Inspector to see resolved status.
+1. Open **Projects → Displays**, choose any of the four templates, and Start. The 20×4 templates show `Los Profes Para Vos` on the first line and also use the fourth line. The 16×2 templates split the name into `Los Profes` and `Para Vos` across their two rows. Open Code to inspect the loaded source and the LCD Inspector to see resolved status.
 2. In a parallel example, change the external potentiometer while running. At the supply end, text vanishes; moving it toward ground reveals the same DDRAM again. Backlight is independent: with simulation stopped, disconnect A or K and restart; illumination must disappear.
 3. Stop, change a declared GPIO without changing the wire, or remove/swap D4/D5. Restart: valid text must not appear. Restore the exact mapping, including RW to ground.
 4. In an I²C example, stop and change the Inspector address to 0x3F while keeping source at 0x27. Restart: blank display. Match the source address and restart to restore communication. Swap SDA/SCL or remove a required LCD-side signal to verify rejection.

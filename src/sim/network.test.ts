@@ -4,7 +4,7 @@ import { createProject } from '../model/project';
 import type { CircuitProject, ElectronicComponent, VirtualNetworkConfig } from '../model/types';
 import { connectVirtualDevice, disconnectVirtualDevice, initialVirtualNetwork, reconcileVirtualNetwork, requestVirtualHttp } from './network';
 
-const config = (): VirtualNetworkConfig => ({ ssid: 'Mesa laboratory', routes: [
+const config = (): VirtualNetworkConfig => ({ ssid: 'Los Profes Para Vos', routes: [
   { method: 'GET', path: '/led/on', status: 200, responseBody: 'on', gpio: { pinId: 'D1', level: 'HIGH' } },
   { method: 'GET', path: '/led/off', status: 200, responseBody: 'off', gpio: { pinId: 'D1', level: 'LOW' } },
 ] });
@@ -21,7 +21,7 @@ describe('deterministic virtual WiFi and HTTP', () => {
     const second = connectVirtualDevice(first, doc, 'b');
     expect(first.devices.a?.ip).toBe('192.0.2.1');
     expect(second.devices.b?.ip).toBe('192.0.2.2');
-    expect(second.devices.a?.ssid).toBe('Mesa laboratory');
+    expect(second.devices.a?.ssid).toBe('Los Profes Para Vos');
     expect(initial.devices).toEqual({});
     expect(connectVirtualDevice(second, doc, 'a')).toBe(second);
   });

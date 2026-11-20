@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Mesa virtual ESP8266 HTTP example",
+    "title": "Los Profes Para Vos virtual ESP8266 HTTP example",
     "version": "1.0.0",
     "description": "Simulator-only HTTP contract. No socket, internet, hardware or firmware execution. These example endpoints exist only after explicit configuration of the selected device. No authentication in this isolated model."
   },

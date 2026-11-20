@@ -1,4 +1,4 @@
-# Mesa · Circuit Lab
+# Los Profes Para Vos
 
 A browser circuit editor built with React, strict TypeScript, Vite, Redux Toolkit and Redux Persist. The central circuit stays visible while the right sidebar provides Components, per-board Code and virtual ESP8266 IoT tools. Electrical simulation and virtual HTTP run locally without a backend. Browser and screenshot acceptance remain pending; see [workspace implementation and validation](docs/WORKSPACE_AND_IOT.md).
 
@@ -26,7 +26,7 @@ npm run test:browser # optional Playwright environment required
 
 ## Existing editor features
 
-- Preserved Mesa appearance, Spanish/English interface, collapsible panels and saved language preference.
+- Preserved Los Profes Para Vos appearance, Spanish/English interface, collapsible panels and saved language preference.
 - Library containing Arduino UNO R3, NodeMCU ESP8266, BB830 breadboard, four LED colors, resistors, pushbuttons, potentiometers and a supply.
 - Add components by clicking or dragging from the library; keyboard and mobile users can use the click action. Drag resistors, LEDs, pushbuttons or potentiometers onto BB830 to insert compatible leads into highlighted free holes.
 - Single selection, Shift+click or the multiple-selection button; group dragging, 90° rotation, duplication and deletion.
@@ -115,6 +115,7 @@ Redux holds the authoritative document. React holds selection, drags, filters an
 
 - [Educational project library, circuits and validation](docs/EXAMPLE_PROJECTS.md)
 - [HD44780 LCD, PCF8574, API scope and validation](docs/LCD.md)
+- [Brand rename audit and compatibility](docs/BRAND_RENAME_AUDIT.md)
 - [Engineering standards](AGENTS.md)
 - [Engineering responsibilities](docs/AGENT_ROLES.md)
 - [Design system](docs/DESIGN_SYSTEM.md)

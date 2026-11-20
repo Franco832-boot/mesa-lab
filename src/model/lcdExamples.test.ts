@@ -23,7 +23,7 @@ describe('four executable LCD educational templates', () => {
     expect(dark.snapshot?.components.lcd?.lcd?.lines[0]).toBe(' '.repeat(16));
     expect(dark.inputs.lcd?.lcd?.memory).toBe(memory);
     const visible = transitionSimulation(dark, { type: 'potentiometer', componentId: 'contrast', ratio: 1 }, project);
-    expect(visible.snapshot?.components.lcd?.lcd?.lines[0]?.trim()).toBe('Mesa Lab');
+    expect(visible.snapshot?.components.lcd?.lcd?.lines[0]?.trim()).toBe('Los Profes');
     expect(visible.inputs.lcd?.lcd?.memory).toBe(memory);
   });
   it.each(examples)('%s displays its sketch through the actual complete circuit', (id) => {
@@ -31,7 +31,8 @@ describe('four executable LCD educational templates', () => {
     const view = state.snapshot?.components.lcd?.lcd;
     expect(state.firmware.uno?.error).toBeNull();
     expect(view?.powered).toBe(true);
-    expect(view?.lines[0]?.trim()).toBe('Mesa Lab');
+    expect(view?.lines[0]?.trim()).toBe(id.startsWith('lcd16') ? 'Los Profes' : 'Los Profes Para Vos');
+    if (id.startsWith('lcd16')) expect(view?.lines[1]?.trim()).toBe('Para Vos');
     expect(view?.rows).toBe(id.startsWith('lcd16') ? 2 : 4);
     expect(view?.columns).toBe(id.startsWith('lcd16') ? 16 : 20);
     expect(view?.connection).toBe(id.endsWith('i2c') ? 'i2c' : 'parallel');
@@ -59,6 +60,6 @@ describe('four executable LCD educational templates', () => {
     const state = run(dark);
     expect(state.snapshot?.components.lcd?.lcd?.contrast).toBe(0);
     expect(state.snapshot?.components.lcd?.lcd?.lines.every((line) => line.trim() === '')).toBe(true);
-    expect(state.inputs.lcd?.lcd?.memory[0]).toBe(77); // 'M' still exists in DDRAM.
+    expect(state.inputs.lcd?.lcd?.memory[0]).toBe(76); // 'L' still exists in DDRAM.
   });
 });

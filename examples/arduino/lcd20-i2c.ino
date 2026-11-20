@@ -9,7 +9,7 @@ void setup() {
   Wire.begin();
   lcd.init();
   lcd.backlight();
-  lcd.print("LosProfesParaVos");
+  lcd.print("Los Profes Para Vos");
   lcd.setCursor(0, 1);
   lcd.print("LCD 20x4 I2C");
   lcd.setCursor(0, 2);
