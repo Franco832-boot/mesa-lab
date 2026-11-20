@@ -28,6 +28,8 @@ export const es = {
   authPassword: 'Contraseña',
   authPasswordHint: 'Entre 12 y 128 caracteres. La contraseña no se recorta.',
   authMemoryNotice: 'La sesión permanece solo en memoria. Al recargar, tendrás que ingresar nuevamente. Tus proyectos locales se conservan.',
+  authServerNoticeTitle: 'El servidor puede tardar en responder',
+  authServerNoticeBody: 'Utilizamos un servidor gratuito que puede entrar en reposo por inactividad. El primer inicio de sesión podría demorar hasta que vuelva a estar activo. Si ocurre un error, esperá unos segundos y volvé a intentarlo.',
   authExpired: 'La sesión venció. Ingresá nuevamente.',
   authInvalidCredentials: 'Email o contraseña incorrectos.',
   authEmailConflict: 'No se pudo registrar ese email.',
