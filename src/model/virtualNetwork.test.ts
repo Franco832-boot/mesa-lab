@@ -6,7 +6,7 @@ import { normalizeVirtualNetworkConfig, validateVirtualNetworkConfig } from './v
 import type { CircuitProject, VirtualNetworkConfig } from './types';
 import { migratePersistedProject } from '../app/persistence';
 
-const config = (): VirtualNetworkConfig => ({ ssid: 'Mesa laboratory', routes: [{ method: 'GET', path: '/led/on', status: 200, responseBody: 'on', gpio: { pinId: 'D1', level: 'HIGH' } }] });
+const config = (): VirtualNetworkConfig => ({ ssid: 'Los Profes Para Vos', routes: [{ method: 'GET', path: '/led/on', status: 200, responseBody: 'on', gpio: { pinId: 'D1', level: 'HIGH' } }] });
 const project = (): CircuitProject => ({ ...createProject('network-config'), components: [createComponent('esp8266', { x: 10, y: 20 }, 'esp')], wires: [] });
 describe('persisted virtual network configuration', () => {
   it('adds optional network config without changing v1 or old-document normalization', () => {

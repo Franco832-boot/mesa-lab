@@ -126,7 +126,7 @@ test('forged/replayed messages and old page/run capabilities cannot change GPIO'
 });
 
 for(const script of ['while(true){}',"document.querySelector('#test').addEventListener('click',()=>{while(true){}});"]) {
-  test(`a non-yielding Worker is terminated while Mesa controls remain responsive: ${script.slice(0,12)}`,{timeout:60000},async t=>{
+  test(`a non-yielding Worker is terminated while Los Profes Para Vos controls remain responsive: ${script.slice(0,12)}`,{timeout:60000},async t=>{
     const page=await openFixture(harness.browser,t,webFixture({html:pageHtml,script}));await networkGuard(page,t);
     const frame=await startWeb(page);
     if(script.includes('addEventListener')) await frame.locator('#test').click();

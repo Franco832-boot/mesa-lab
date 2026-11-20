@@ -1750,7 +1750,7 @@ button {
   }
 }
 
-/* Phase 2: interaction uses the existing Mesa surfaces and accent palette. */
+/* Phase 2: interaction uses the existing Los Profes Para Vos surfaces and accent palette. */
 .editor-toolbar {
   height: auto;
   min-height: 49px;
@@ -2056,7 +2056,7 @@ button {
   }
 }
 
-/* Phase 3: existing Mesa surfaces extended with electrical readings and controls. */
+/* Phase 3: existing Los Profes Para Vos surfaces extended with electrical readings and controls. */
 .simulation-edit-fieldset {
   min-width: 0;
   border: 0;

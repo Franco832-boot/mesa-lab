@@ -496,7 +496,7 @@
     }
   },
   "info": {
-    "title": "Mesa Lab API",
+    "title": "Los Profes Para Vos API",
     "description": "Fase 1 local. Los documentos se guardan como JSONB; no se ejecuta código Arduino/ESP8266.",
     "version": "1.0.0",
     "contact": {}

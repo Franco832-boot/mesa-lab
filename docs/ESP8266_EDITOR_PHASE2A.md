@@ -25,7 +25,7 @@ Persistence reuses the existing optional v1 files/activeFile fields and validate
 
 ## Explicit limits and integration requirement
 
-Start still executes only `main.ino`. The editor preserves standard `.h`/`.cpp` organization but does not resolve local includes, link translation units, execute helper functions or support arbitrary C++. No MESA-specific symbol, DSL, generated route or HTML syntax is introduced. Resource loading must later use an explicitly supported standard API, rather than a proprietary source replacement.
+Start still executes only `main.ino`. The editor preserves standard `.h`/`.cpp` organization but does not resolve local includes, link translation units, execute helper functions or support arbitrary C++. No simulator-specific symbol, DSL, generated route or HTML syntax is introduced. Resource loading must later use an explicitly supported standard API, rather than a proprietary source replacement.
 
 The HTML editor stores a future web resource only. It renders no preview, runs no user script and inserts no fixed sensor data. Future preview must render the actual simulated ESP8266 server response; its actions must pass through sketch handlers and GPIO into the existing solver. Sensor responses must originate from the existing electrically validated DHT path.
 

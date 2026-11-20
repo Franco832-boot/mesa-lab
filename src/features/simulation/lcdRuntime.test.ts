@@ -7,7 +7,7 @@ import type { CircuitProject } from '../../model/types';
 import { createComponent } from '../../model/components';
 import { serializeProject } from '../../model/project';
 
-const source = '#include <LiquidCrystal.h>\nLiquidCrystal lcd(12,11,5,4,3,2);void setup(){lcd.begin(16,2);lcd.print("Mesa Lab");lcd.setCursor(0,1);lcd.print(42);}void loop(){delay(1000);}';
+const source = '#include <LiquidCrystal.h>\nLiquidCrystal lcd(12,11,5,4,3,2);void setup(){lcd.begin(16,2);lcd.print("Los Profes");lcd.setCursor(0,1);lcd.print(42);}void loop(){delay(1000);}';
 function run(project: CircuitProject, sketch = source) { return transitionSimulation(initialSimulation(), { type: 'firmware-run', componentId: 'uno', source: sketch }, project); }
 function advance(state: SimulationState, project: CircuitProject, elapsedMs: number) {
   let next = transitionSimulation(state, { type: 'firmware-advance', elapsedMs }, project);
@@ -23,12 +23,12 @@ describe('LiquidCrystal writes through a physically validated parallel bus', () 
     project.components = project.components.map((part) => part.kind === 'lcd-16x2' ? { ...part, kind: 'lcd-20x4' } : part);
     const sketch = source.replace('begin(16,2)', 'begin(20,4)').replace('lcd.print(42);', 'lcd.print(42);lcd.setCursor(0,2);lcd.print("Row 3");lcd.setCursor(19,3);lcd.write(90);');
     const view = run(project, sketch).snapshot?.components.lcd?.lcd;
-    expect(view?.lines).toEqual(['Mesa Lab            ','42                  ','Row 3               ','                   Z']);
+    expect(view?.lines).toEqual(['Los Profes          ','42                  ','Row 3               ','                   Z']);
   });
   it('executes the constructor, begin, text and numeric print against the real circuit', () => {
     const project = parallelLcdFixture(), before = serializeProject(project), state = run(project);
     expect(state.firmware.uno?.error).toBeNull();
-    expect(state.snapshot?.components.lcd?.lcd?.lines).toEqual(['Mesa Lab        ','42              ']);
+    expect(state.snapshot?.components.lcd?.lcd?.lines).toEqual(['Los Profes      ','42              ']);
     expect(state.snapshot?.components.lcd?.lcd?.connection).toBe('parallel');
     expect(serializeProject(project)).toBe(before);
     expect(transitionSimulation(state, { type: 'reset' }, project)).toEqual(initialSimulation());
@@ -48,7 +48,7 @@ describe('LiquidCrystal writes through a physically validated parallel bus', () 
   });
   it('respects GPIO mode changes after begin and prevents another unwired board from modifying its controller', () => {
     const project = parallelLcdFixture();
-    expect(run(project, source.replace('lcd.print("Mesa Lab");', 'pinMode(12,INPUT);lcd.print("Mesa Lab");')).inputs.lcd?.lcd?.memory).toEqual(Array(80).fill(32));
+    expect(run(project, source.replace('lcd.print("Los Profes");', 'pinMode(12,INPUT);lcd.print("Los Profes");')).inputs.lcd?.lcd?.memory).toEqual(Array(80).fill(32));
     const state = run(project);
     project.components.push(createComponent('arduino-uno', { x: 0, y: 300 }, 'other'));
     const second = transitionSimulation(state, { type: 'firmware-run', componentId: 'other', source }, project);

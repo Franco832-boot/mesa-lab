@@ -282,7 +282,7 @@ export function App({ saveProject }: { saveProject: ProjectSync['save'] }) {
       );
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'mesa-project.json';
+      link.download = 'los-profes-para-vos-project.json';
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setNotice('exportSuccess');
@@ -404,7 +404,7 @@ export function App({ saveProject }: { saveProject: ProjectSync['save'] }) {
         <a
           className="brand"
           href="#"
-          aria-label="LosProfesParaVos"
+          aria-label="Los Profes Para Vos"
           onClick={(event) => {
             event.preventDefault();
             setHelpOpen(true);
@@ -414,7 +414,7 @@ export function App({ saveProject }: { saveProject: ProjectSync['save'] }) {
             <img src="/losprofesparavos-isotype.png" alt="" width={28} height={28} />
           </span>
           <span className="brand-name">
-            LosProfesParaVos
+            Los Profes Para Vos
             <small>{t('brandSubtitle')}</small>
           </span>
         </a>

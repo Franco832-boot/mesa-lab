@@ -14,11 +14,16 @@ async function load(page, id) {
   await page.getByTestId(`example-${id}`).getByRole('link').click();
   await page.locator('[data-reference="lcd"]').waitFor();
 }
+async function expectBrand(page, id) {
+  const lines = id.startsWith('lcd16') ? ['Los Profes', 'Para Vos'] : ['Los Profes Para Vos'];
+  await page.waitForFunction((lines) => lines.every((text, row) =>
+    document.querySelector(`[data-reference="lcd"] [data-lcd-row="${row}"]`)?.getAttribute('aria-label')?.trim() === text), lines);
+}
 for (const id of ['lcd16-parallel','lcd20-parallel','lcd16-i2c','lcd20-i2c']) {
   test(`${id} displays source-generated text and restores its project after reload`, { timeout: 60000 }, async (t) => {
     const page = await openFixture(harness.browser, t, project());
     await load(page, id); await page.getByTestId('simulation-start').click();
-    await page.waitForFunction(() => document.querySelector('[data-reference="lcd"] [data-lcd-row="0"]')?.getAttribute('aria-label')?.trim() === 'Mesa Lab');
+    await expectBrand(page, id);
     const rows = id.startsWith('lcd20') ? 4 : 2, columns = rows === 4 ? 20 : 16;
     const lcd = page.locator('[data-reference="lcd"]');
     assert.equal(await lcd.locator('[data-lcd-row]').count(), rows);
@@ -34,7 +39,7 @@ for (const id of ['lcd16-parallel','lcd20-parallel','lcd16-i2c','lcd20-i2c']) {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByText('Project saved in this browser.', { exact: true }).waitFor();
     await page.reload(); await page.getByTestId('simulation-start').click();
-    await page.waitForFunction(() => document.querySelector('[data-reference="lcd"] [data-lcd-row="0"]')?.getAttribute('aria-label')?.trim() === 'Mesa Lab');
+    await expectBrand(page, id);
   });
 }
 test('the PCF address inspector controls addressed communication without changing the sketch', { timeout: 60000 }, async (t) => {
@@ -47,5 +52,5 @@ test('the PCF address inspector controls addressed communication without changin
   await page.getByTestId('simulation-stop').click();
   await page.getByLabel('I²C address', { exact: true }).selectOption('39');
   await page.getByTestId('simulation-start').click();
-  await page.waitForFunction(() => document.querySelector('[data-reference="lcd"] [data-lcd-row="0"]')?.getAttribute('aria-label')?.trim() === 'Mesa Lab');
+  await expectBrand(page, 'lcd16-i2c');
 });

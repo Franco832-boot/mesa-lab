@@ -212,7 +212,7 @@ describe('independent project library and existing right tools', () => {
       if (!href) throw new Error('Missing mailto');
       const url = new URL(href);
       expect(url.protocol).toBe('mailto:'); expect(url.pathname).toBe('losprofesparavos073@gmail.com');
-      expect(url.searchParams.get('subject')).toContain('LosProfesParaVos');
+      expect(url.searchParams.get('subject')).toContain('Los Profes Para Vos');
       expect(url.searchParams.get('body')).toContain('\r\n');
     }
   });
@@ -336,7 +336,7 @@ describe('independent project library and existing right tools', () => {
     const help = element('.help-button'); help.focus();
     await click('.help-button');
     const dialog = element('dialog[open]');
-    expect(dialog.getAttribute('aria-label')).toBe(locale === 'es' ? 'Cómo usar LosProfesParaVos' : 'How to use LosProfesParaVos');
+    expect(dialog.getAttribute('aria-label')).toBe(locale === 'es' ? 'Cómo usar Los Profes Para Vos' : 'How to use Los Profes Para Vos');
     expect(dialog.querySelectorAll('.help-sections section')).toHaveLength(10);
     expect(dialog.textContent).toContain('DHT11'); expect(dialog.textContent).toContain('PCF8574');
     expect(dialog.textContent).toContain('Serial.println()');

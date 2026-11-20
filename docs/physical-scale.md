@@ -18,7 +18,7 @@ The `viewBox` includes leads, margins and shadow space; it is not a physical bod
 | LED | T-1¾, Ø5 mm lens | 5.9 mm base × 8.6 mm height | 23.6 × 34.4 units; Ø20 lens |
 | Resistor | Axial CFR-25, ¼ W | 6.3 × Ø2.4 mm | 25.2 × 9.6 units |
 
-The selected breadboard has 63 columns of ten contacts and four rails of 50: 630 + 200 = 830. It does not represent a mini or 400-contact breadboard. The graphic design remains original Mesa artwork.
+The selected breadboard has 63 columns of ten contacts and four rails of 50: 630 + 200 = 830. It does not represent a mini or 400-contact breadboard. The graphic design remains original Los Profes Para Vos artwork.
 
 The [vector scale comparison](physical-scale-reference.svg) is generated with the editor's component SVGs and allows proportion review without a server. It is a static reference, not a browser interaction test.
 
